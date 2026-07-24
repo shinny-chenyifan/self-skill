@@ -1,0 +1,4 @@
+interface:
+  display_name: "Local PR Review"
+  short_description: "多视角只读审查本地 PR，自动验证、去重并汇总真实问题"
+  default_prompt: "使用 $local-pr-review 审查当前 PR；未指定目标分支时自动检测，并保持仓库只读。"

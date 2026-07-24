@@ -1,0 +1,94 @@
+{
+  "type": "object",
+  "properties": {
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["P0", "P1", "P2", "P3"]
+          },
+          "category": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          },
+          "line_start": {
+            "type": "integer"
+          },
+          "line_end": {
+            "type": "integer"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "trigger": {
+            "type": "string"
+          },
+          "suggested_fix": {
+            "type": "string"
+          },
+          "suggested_test": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["high", "medium", "low"]
+          },
+          "source_lanes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "title",
+          "severity",
+          "category",
+          "file",
+          "line_start",
+          "line_end",
+          "summary",
+          "evidence",
+          "trigger",
+          "suggested_fix",
+          "suggested_test",
+          "confidence",
+          "source_lanes"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "rejected_candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": ["title", "reason"],
+        "additionalProperties": false
+      }
+    },
+    "gap_search_summary": {
+      "type": "string"
+    }
+  },
+  "required": ["findings", "rejected_candidates", "gap_search_summary"],
+  "additionalProperties": false
+}
