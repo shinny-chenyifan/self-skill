@@ -1,4 +1,4 @@
 interface:
   display_name: "Local PR Review"
-  short_description: "多视角只读审查本地 PR，自动验证、去重并汇总真实问题"
-  default_prompt: "使用 $local-pr-review 审查当前 PR；未指定目标分支时自动检测，并保持仓库只读。"
+  short_description: "按已确认范围多视角只读审查本地 PR，归因并汇总问题"
+  default_prompt: "使用 $local-pr-review 审查当前 PR；先根据关联 plan 或 issue 整理并确认 Review Scope Contract，范围不完整或有冲突时先询问，确认前不得启动 Review。未指定目标分支时自动检测，并保持仓库只读。"

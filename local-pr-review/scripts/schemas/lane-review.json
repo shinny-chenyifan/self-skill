@@ -1,6 +1,10 @@
 {
   "type": "object",
   "properties": {
+    "scope_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
     "lane": {
       "type": "string"
     },
@@ -10,17 +14,23 @@
         "type": "object",
         "properties": {
           "title": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
           },
           "severity": {
             "type": "string",
             "enum": ["P0", "P1", "P2", "P3"]
           },
           "category": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
           },
           "file": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
           },
           "line_start": {
             "type": "integer"
@@ -29,23 +39,64 @@
             "type": "integer"
           },
           "summary": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
           },
           "evidence": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
           },
           "trigger": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
           },
           "suggested_fix": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
           },
           "suggested_test": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
           },
           "confidence": {
             "type": "string",
             "enum": ["high", "medium", "low"]
+          },
+          "scope_relation": {
+            "type": "string",
+            "enum": [
+              "in_scope",
+              "required_integration",
+              "scope_drift",
+              "out_of_scope",
+              "uncertain"
+            ]
+          },
+          "change_relation": {
+            "type": "string",
+            "enum": [
+              "introduced_by_change",
+              "amplified_by_change",
+              "unmet_plan_requirement",
+              "pre_existing_unchanged",
+              "not_attributable",
+              "uncertain"
+            ]
+          },
+          "scope_basis": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "attribution_evidence": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
           }
         },
         "required": [
@@ -60,12 +111,16 @@
           "trigger",
           "suggested_fix",
           "suggested_test",
-          "confidence"
+          "confidence",
+          "scope_relation",
+          "change_relation",
+          "scope_basis",
+          "attribution_evidence"
         ],
         "additionalProperties": false
       }
     }
   },
-  "required": ["lane", "findings"],
+  "required": ["scope_id", "lane", "findings"],
   "additionalProperties": false
 }

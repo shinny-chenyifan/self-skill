@@ -1,23 +1,33 @@
 {
   "type": "object",
   "properties": {
+    "scope_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
     "findings": {
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
           "title": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
           },
           "severity": {
             "type": "string",
             "enum": ["P0", "P1", "P2", "P3"]
           },
           "category": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
           },
           "file": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
           },
           "line_start": {
             "type": "integer"
@@ -26,28 +36,80 @@
             "type": "integer"
           },
           "summary": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
           },
           "evidence": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
           },
           "trigger": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
           },
           "suggested_fix": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
           },
           "suggested_test": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
           },
           "confidence": {
             "type": "string",
             "enum": ["high", "medium", "low"]
           },
+          "scope_relation": {
+            "type": "string",
+            "enum": [
+              "in_scope",
+              "required_integration",
+              "scope_drift",
+              "out_of_scope",
+              "uncertain"
+            ]
+          },
+          "change_relation": {
+            "type": "string",
+            "enum": [
+              "introduced_by_change",
+              "amplified_by_change",
+              "unmet_plan_requirement",
+              "pre_existing_unchanged",
+              "not_attributable",
+              "uncertain"
+            ]
+          },
+          "scope_basis": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "attribution_evidence": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
           "source_lanes": {
             "type": "array",
+            "minItems": 1,
             "items": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            }
+          },
+          "source_candidate_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
             }
           }
         },
@@ -64,7 +126,12 @@
           "suggested_fix",
           "suggested_test",
           "confidence",
-          "source_lanes"
+          "scope_relation",
+          "change_relation",
+          "scope_basis",
+          "attribution_evidence",
+          "source_lanes",
+          "source_candidate_ids"
         ],
         "additionalProperties": false
       }
@@ -75,20 +142,35 @@
         "type": "object",
         "properties": {
           "title": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
           },
           "reason": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "candidate_ids": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            }
           }
         },
-        "required": ["title", "reason"],
+        "required": ["title", "reason", "candidate_ids"],
         "additionalProperties": false
       }
     },
     "gap_search_summary": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
     }
   },
-  "required": ["findings", "rejected_candidates", "gap_search_summary"],
+  "required": ["scope_id", "findings", "rejected_candidates", "gap_search_summary"],
   "additionalProperties": false
 }
