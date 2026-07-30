@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "workflow_id": "{{WORKFLOW_ID}}",
+  "plan_revision": "{{PLAN_REVISION}}",
+  "orchestration_revision": "{{ORCHESTRATION_REVISION}}",
+  "condition_id": "{{CONDITION_ID}}",
+  "status": "closed",
+  "closure": {
+    "close_condition": "{{CLOSE_CONDITION}}",
+    "verified_by": "{{VERIFIER}}",
+    "proofs": [
+      {
+        "kind": "{{PROOF_KIND}}",
+        "reference": {
+          "path": "{{PROOF_PATH}}",
+          "sha256": "{{PROOF_CONTENT_SHA256}}"
+        },
+        "identity": "{{DETERMINISTIC_IDENTITY_DERIVED_FROM_REFERENCED_PAYLOAD}}"
+      }
+    ]
+  }
+}

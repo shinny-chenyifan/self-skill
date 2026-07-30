@@ -1,0 +1,62 @@
+{
+  "schema_version": 3,
+  "workflow_id": "{{WORKFLOW_ID}}",
+  "runtime_state_id": "{{RUNTIME_STATE_ID}}",
+  "plan_revision": "{{PLAN_REVISION}}",
+  "orchestration_revision": "{{ORCHESTRATION_REVISION}}",
+  "workflow_status": "planning",
+  "transition_history": [],
+  "git": {
+    "target_branch": "{{TARGET_BRANCH}}",
+    "workflow_base_sha": null,
+    "plan_sha": null,
+    "read_only_git_authorization_basis": null
+  },
+  "conditions": [],
+  "tasks": {},
+  "integration": {
+    "status": "planned",
+    "start_sha": null,
+    "head_sha": null,
+    "clean": null,
+    "write_authorization_basis": null,
+    "commits": [],
+    "commit_authorizations": [],
+    "merged_tasks": [],
+    "tests": {
+      "status": "pending",
+      "tested_head_sha": null,
+      "evidence_ref": null
+    },
+    "final_review": {
+      "status": "pending",
+      "engine": null,
+      "mode": null,
+      "actual_model": null,
+      "actual_reasoning_effort": null,
+      "model_selection_basis": null,
+      "fail_on": null,
+      "scope_id": null,
+      "scope_revision": null,
+      "plan_revision": null,
+      "orchestration_revision": null,
+      "contract_revisions": [],
+      "review_base_sha": null,
+      "merge_base_sha": null,
+      "reviewed_head_sha": null,
+      "snapshot_valid": false,
+      "blocking_count": null,
+      "completed_views": [],
+      "failed_views": [],
+      "aggregation_mode": null,
+      "report_ref": null,
+      "read_only_git_authorization_basis": null
+    },
+    "execution_log_ref": null
+  },
+  "authorizations": {
+    "merge": null,
+    "push": null,
+    "cleanup": null
+  }
+}

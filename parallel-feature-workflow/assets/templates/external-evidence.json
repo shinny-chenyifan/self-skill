@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "workflow_id": "{{WORKFLOW_ID}}",
+  "plan_revision": "{{PLAN_REVISION}}",
+  "orchestration_revision": "{{ORCHESTRATION_REVISION}}",
+  "subject_id": "condition:{{CONDITION_ID}}",
+  "status": "verified",
+  "evidence_id": "{{EVIDENCE_ID}}",
+  "revision": "{{EVIDENCE_REVISION}}",
+  "result": "{{VERIFIED_RESULT}}"
+}
