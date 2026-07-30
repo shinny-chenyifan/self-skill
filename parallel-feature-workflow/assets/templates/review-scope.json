@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "status": "confirmed",
+  "confirmation_basis": "{{SCOPE_CONFIRMATION_BASIS}}",
+  "sources": [
+    {
+      "kind": "plan",
+      "reference": "{{PLAN_REFERENCE}}",
+      "revision": "{{PLAN_REVISION}}"
+    }
+  ],
+  "objective": "{{REVIEW_OBJECTIVE}}",
+  "in_scope": ["{{IN_SCOPE_ITEM}}"],
+  "out_of_scope": [],
+  "acceptance_criteria": ["{{AC_ID}}"],
+  "integration_constraints": [],
+  "open_questions": []
+}

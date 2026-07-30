@@ -1,0 +1,163 @@
+{
+  "schema_version": 3,
+  "workflow_id": "{{WORKFLOW_ID}}",
+  "runtime_state_id": "{{RUNTIME_STATE_ID}}",
+  "sources": ["{{SOURCE_REFERENCE}}"],
+  "supersedes": null,
+  "planning_engine": {
+    "capability": "planner",
+    "primary_skill": "solution-planner",
+    "selected_engine": "solution-planner",
+    "availability": "available",
+    "selection_basis": {
+      "kind": "catalog",
+      "reference": {
+        "schema_version": 1,
+        "subject_id": "{{WORKFLOW_ID}}:planning_engine",
+        "revision": "{{PLANNING_ENGINE_SELECTION_REVISION}}",
+        "capability": "planner",
+        "primary_skill": "solution-planner",
+        "availability": "available",
+        "decision": "use_primary",
+        "actor": "orchestrator",
+        "evidence": "{{PLANNING_ENGINE_SELECTION_EVIDENCE}}",
+        "evidence_sha256": "{{PLANNING_ENGINE_SELECTION_EVIDENCE_SHA256}}"
+      }
+    },
+    "fallback_reason": null,
+    "coverage_gap": [],
+    "remaining_risk": []
+  },
+  "review_engine": {
+    "capability": "review",
+    "primary_skill": "local-pr-review",
+    "selected_engine": "local-pr-review",
+    "availability": "available",
+    "selection_basis": {
+      "kind": "catalog",
+      "reference": {
+        "schema_version": 1,
+        "subject_id": "{{WORKFLOW_ID}}:review_engine",
+        "revision": "{{REVIEW_ENGINE_SELECTION_REVISION}}",
+        "capability": "review",
+        "primary_skill": "local-pr-review",
+        "availability": "available",
+        "decision": "use_primary",
+        "actor": "orchestrator",
+        "evidence": "{{REVIEW_ENGINE_SELECTION_EVIDENCE}}",
+        "evidence_sha256": "{{REVIEW_ENGINE_SELECTION_EVIDENCE_SHA256}}"
+      }
+    },
+    "fallback_reason": null,
+    "coverage_gap": [],
+    "remaining_risk": []
+  },
+  "plan": {
+    "revision": "{{PLAN_REVISION}}",
+    "quality_subject": "{{PLAN_REVISION}}",
+    "contract_status": "就绪",
+    "quality_status": "通过",
+    "source": {
+      "task_type": "{{SOURCE_TASK_TYPE}}",
+      "decision_status_field": "decision_status",
+      "decision_status": "已确认",
+      "confirmation_basis_field": "confirmation_basis",
+      "confirmation_basis": "{{PLAN_CONFIRMATION_BASIS}}"
+    },
+    "planning_mode": "new_plan",
+    "effective_decision_status": "已确认",
+    "effective_confirmation_basis": "{{PLAN_CONFIRMATION_BASIS}}",
+    "confirmation": {
+      "subject_type": "plan",
+      "subject_id": "{{WORKFLOW_ID}}",
+      "revision": "{{PLAN_REVISION}}",
+      "confirmation_basis": "{{PLAN_CONFIRMATION_BASIS}}",
+      "confirmed_by": "{{PLAN_CONFIRMED_BY}}",
+      "confirmed_at": null,
+      "scoped_skip": false
+    },
+    "acceptance_criteria": [
+      {
+        "id": "{{AC_ID}}",
+        "statement": "{{AC_STATEMENT}}",
+        "source": {
+          "kind": "plan",
+          "reference": "{{PLAN_REFERENCE}}",
+          "revision": "{{PLAN_REVISION}}"
+        }
+      }
+    ],
+    "conditions": []
+  },
+  "orchestration": {
+    "revision": "{{ORCHESTRATION_REVISION}}",
+    "based_on_plan_revision": "{{PLAN_REVISION}}",
+    "status": "confirmed",
+    "confirmation_basis": "{{ORCHESTRATION_CONFIRMATION_BASIS}}",
+    "confirmation": {
+      "subject_type": "orchestration",
+      "subject_id": "{{WORKFLOW_ID}}",
+      "revision": "{{ORCHESTRATION_REVISION}}",
+      "confirmation_basis": "{{ORCHESTRATION_CONFIRMATION_BASIS}}",
+      "confirmed_by": "{{ORCHESTRATION_CONFIRMED_BY}}",
+      "confirmed_at": null,
+      "scoped_skip": false
+    },
+    "sources": ["{{SOURCE_REFERENCE}}"],
+    "supersedes": null
+  },
+  "artifacts": {
+    "solution_record": "solution-record.md",
+    "orchestration_record": "orchestration-record.md",
+    "integration_plan": "merge/integration-plan.md"
+  },
+  "contracts": [],
+  "tasks": [],
+  "integration": {
+    "branch": "{{INTEGRATION_BRANCH}}",
+    "worktree": "{{INTEGRATION_WORKTREE}}",
+    "sources": ["{{SOURCE_REFERENCE}}"],
+    "supersedes": null,
+    "required_tests": [
+      {
+        "id": "{{FINAL_TEST_ID}}",
+        "command": "{{FINAL_TEST_COMMAND}}",
+        "acceptance_criteria": ["{{AC_ID}}"]
+      }
+    ],
+    "checkpoint_tests": {
+      "{{TASK_ID}}": [
+        {
+          "id": "{{CHECKPOINT_TEST_ID}}",
+          "command": "{{CHECKPOINT_TEST_COMMAND}}",
+          "acceptance_criteria": ["{{TASK_AC_ID}}"]
+        }
+      ]
+    },
+    "allowed_paths": ["{{INTEGRATION_ALLOWED_PATH_OR_PATTERN}}"],
+    "merge_order": ["{{TASK_ID}}"],
+    "review_scope": {
+      "scope_revision": "{{INTEGRATION_SCOPE_REVISION}}",
+      "scope_id": "{{INTEGRATION_SCOPE_ID}}",
+      "fail_on": "P2",
+      "contract": {
+        "version": 1,
+        "status": "confirmed",
+        "confirmation_basis": "{{INTEGRATION_SCOPE_CONFIRMATION_BASIS}}",
+        "sources": [
+          {
+            "kind": "plan",
+            "reference": "{{PLAN_REFERENCE}}",
+            "revision": "{{PLAN_REVISION}}"
+          }
+        ],
+        "objective": "{{INTEGRATION_REVIEW_OBJECTIVE}}",
+        "in_scope": ["{{INTEGRATION_IN_SCOPE_ITEM}}"],
+        "out_of_scope": [],
+        "acceptance_criteria": ["{{AC_ID}}"],
+        "integration_constraints": [],
+        "open_questions": []
+      }
+    }
+  }
+}

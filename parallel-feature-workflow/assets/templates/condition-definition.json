@@ -1,0 +1,22 @@
+{
+  "id": "{{CONDITION_ID}}",
+  "owner": "{{CONDITION_OWNER}}",
+  "close_condition": "{{CLOSE_CONDITION}}",
+  "must_close_before": "{{CONDITION_GATE}}",
+  "applies_to": ["{{CONDITION_TARGET}}"],
+  "required_proof_kinds": ["test_result"],
+  "proof_requirements": [
+    {
+      "kind": "test_result",
+      "head_source": {
+        "kind": "plan_sha"
+      },
+      "tests": [
+        {
+          "test_id": "{{CONDITION_TEST_ID}}",
+          "command": "{{EXACT_CONDITION_TEST_COMMAND}}"
+        }
+      ]
+    }
+  ]
+}

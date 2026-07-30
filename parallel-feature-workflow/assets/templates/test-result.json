@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "workflow_id": "{{WORKFLOW_ID}}",
+  "plan_revision": "{{PLAN_REVISION}}",
+  "orchestration_revision": "{{ORCHESTRATION_REVISION}}",
+  "subject_id": "{{TEST_SUBJECT_ID}}",
+  "status": "pending",
+  "tested_head_sha": null,
+  "commands": [
+    {
+      "test_id": "{{TEST_ID}}",
+      "command": "{{EXACT_COMMAND}}",
+      "exit_code": null,
+      "status": "pending",
+      "result": null
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "workflow_id": "{{WORKFLOW_ID}}",
+  "plan_revision": "{{PLAN_REVISION}}",
+  "orchestration_revision": "{{ORCHESTRATION_REVISION}}",
+  "subject_id": "condition:{{CONDITION_ID}}",
+  "status": "confirmed",
+  "condition_id": "{{CONDITION_ID}}",
+  "close_condition": "{{CLOSE_CONDITION}}",
+  "confirmation_id": "{{CONFIRMATION_ID}}",
+  "revision": "{{CONFIRMATION_REVISION}}",
+  "confirmation_basis": "{{CONFIRMATION_BASIS}}",
+  "confirmed_by": "{{CONFIRMED_BY}}",
+  "confirmed_at": "{{CONFIRMED_AT}}"
+}

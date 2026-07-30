@@ -1,1111 +1,261 @@
 ---
-
 name: parallel-feature-workflow
-description: Handle medium and large software requirements using staged proposal discussion, human confirmation gates, contract-first design, context budgeting, worktree isolation, implementation handoff, review, integration and merge workflow.
+description: 为跨模块、多子任务或大型重构编排从已确认方案到实现、Review 和集成的完整交付流程，协调多 Agent、Git worktree、契约、依赖、分支交接、修复复审与合并就绪。用户要求并行开发、多 Agent 实现、worktree 隔离、跨分支集成或完整方案到 Review 闭环时使用。solution-planner 和 local-pr-review 可用时必须组合使用；仅在对应 Skill 缺失、无法加载，或用户明确禁用并选择降级流程时使用内置 fallback。不适用于单一局部、强耦合且并行收益不足的改动。
 ---
 
-# Purpose
+# 并行功能交付编排
 
-Use this skill whenever:
+## 目标
 
-* The requirement affects multiple modules
-* Estimated changes exceed 300 lines
-* Multiple subtasks exist
-* User mentions worktree, parallel development, review, merge or large refactor
-* Multiple agents may work on related components
-* A feature needs clear task ownership, interface contracts, review and integration control
+把已经过质量门禁并获得确认的方案，转换为可并行实施、可追踪 Review、可安全集成的执行流程。
 
-This skill acts as an architect / planner / workflow coordinator.
+本 Skill 是生命周期编排器，不重复实现方案设计或代码 Review：
 
-It should normally be used only in the initial planning conversation.
+- `solution-planner` 负责需求契约、现状调研、方案质量、`plan_revision` 和方案确认状态。
+- 本 Skill 负责任务图、共享契约、文件所有权、Agent/worktree、交接、修复和集成调度。
+- `local-pr-review` 负责固定差异、范围契约、多视角 Review、归因、去重和阻断判定。
 
-Coder, reviewer and integrator conversations should usually not invoke this skill again. They should use the generated task documents, contract documents and bootstrap prompts.
+## 资源读取
 
----
+执行完整工作流时，按阶段完整读取以下文件：
 
-# Expected User Workflow
+1. 开始编排前读取 [workflow-state-machine.md](references/workflow-state-machine.md)。
+2. 生成任务、契约和 Agent 交接前读取 [handoff-contracts.md](references/handoff-contracts.md)。
+3. 计划或执行任何 Git/worktree 动作前读取 [git-worktree-lifecycle.md](references/git-worktree-lifecycle.md)。
+4. 仅在专职 Skill 缺失、无法加载，或用户明确禁用并选择 fallback 时读取 [fallback-protocols.md](references/fallback-protocols.md)。
 
-The intended usage is:
+生成 `.ai/` 文档时复制并填写 `assets/templates/` 中的模板，不要重新发明结构。生成后使用 `scripts/validate_workflow.py` 校验；manifest 中的 AC catalog 是机器权威，任务、三类计划测试和 Review Scope 都必须保留可验证的 AC 覆盖关系。
 
-User:
+按阶段只读取需要的模板：规划基线使用 `workflow-manifest/solution-record/orchestration-record/task/contract/task-report/integration-plan/review-scope`；运行态初始化使用 `runtime-state`；条件、依赖、测试与 Review 留证使用 `condition-definition/condition-result/external-evidence/user-confirmation/artifact-result/test-result/review-result`；集成执行使用 `integration-execution`。
 
-parallel-feature-workflow 替我实现 xxxx
+## 能力路由
 
-The assistant must then follow this staged process:
+先检查当前会话提供的可用 Skills catalog，以精确名称解析：
 
-1. Discuss and refine the technical solution with the user.
-2. Wait for explicit user confirmation of the solution.
-3. Plan task decomposition, agents, dependencies, contracts and worktrees.
-4. Wait for explicit user confirmation of the agent/worktree plan.
-5. Generate the `.ai/` markdown documents.
-6. Tell the user which worktrees to create.
-7. Tell the user which documents each coder, reviewer and integrator conversation should read.
-8. Generate ready-to-copy bootstrap prompts for each coder, reviewer and integrator.
+- `solution-planner`
+- `local-pr-review`
 
-Do not generate the final `.ai/` task/contract/review/merge documents before the user confirms the agent/worktree plan.
+不要只检查固定文件路径；Skill 可能来自插件或其他非文件系统来源。为每项能力记录：
 
-Do not start implementation in the initial planning conversation unless the user explicitly asks to implement after planning.
+- `available`：Skill 和当前阶段要求的资源均可完整读取。
+- `absent`：catalog 中不存在。
+- `unloadable`：存在但 Skill 或必需资源无法完整读取。
+- `execution_blocked`：已加载，但门禁、权限、环境或执行条件阻止继续。
+- `disabled_by_user`：用户明确要求不使用该专职 Skill。
 
----
+规则：
 
-# Interaction Gates
+1. `available` 时必须使用专职 Skill，不得复制或旁路其流程。
+2. 只有 `absent`、`unloadable`，或用户明确同意对 `disabled_by_user` 使用降级流程时，才允许启用对应 fallback。
+3. `execution_blocked` 必须传播原阻塞并暂停、修复或请求用户决策，不得切换 fallback 绕过。
+4. 用户只要求禁用而未选择降级时，停止对应完整阶段，不得自行输出完整方案、完整 Review 或 `MERGE_READY`。
+5. 最终报告 `planning_engine`、`review_engine`、选择依据、fallback 原因和剩余覆盖缺口。
 
-This skill has mandatory confirmation gates.
+能力记录使用 `capability/primary_skill/selected_engine/availability/selection_basis/fallback_reason/coverage_gap/remaining_risk`。`selection_basis.reference` 是绑定 workflow/capability/availability/decision/actor/revision 和 evidence SHA-256 的结构化记录；`disabled_by_user` 只有在 `kind=user_confirmation`、actor 为 user 且 decision 明确为 `use_fallback` 时才允许降级，不得从 `selected_engine=fallback` 或任意字符串反推授权。
 
-## Gate 1: Solution Confirmation
+## 不可绕过的边界
 
-Before creating the detailed agent/worktree plan, present a solution proposal.
+- 遵守仓库中的 `AGENTS.md`、项目规范、权限和用户确认要求。
+- 方案确认、编排确认、文件写入授权和 Git 操作授权互不替代。
+- 只把紧邻明确确认请求、且没有夹带修订的回复绑定到所展示的确切 revision；含修改意见的回复不是确认。
+- 完整工作流的方案与编排确认不可跳过，确认记录的 `scoped_skip=false`；用户要求跳过时停止完整流程，不得输出 `MERGE_READY`。其他可选确认若允许跳过，只对明确对象和 revision 生效。
+- 质量、快照一致性、Review 完整性和合并就绪条件不可通过笼统的“跳过确认”绕过。
+- 未获授权时只输出建议、精确目标和命令，不修改文件，不执行 Git。
+- `MERGE_READY` 只表示固定提交技术上就绪，不代表已获 merge、push、发布或清理授权。
 
-The proposal must include:
+## 核心流程
 
-* Understanding of the requirement
-* Proposed technical approach
-* Key design choices
-* Alternatives if relevant
-* Risks
-* Open questions if any
-* Suggested verification method
+始终按以下顺序推进：
 
-Then ask the user to confirm or modify the solution.
+`能力解析 → 方案形成/核验 → 并行资格判断 → 编排确认 → 文档与规划基线 → 实现交接 → 分支 Review → Fix/Re-review → 集成 → 最终 Review → Merge Readiness → 最终授权`
 
-Do not proceed to agent/worktree planning until the user confirms.
+### 1. 形成或核验方案
 
-Accept confirmations such as:
+`solution-planner` 可用时：
 
-* 确认
-* 可以
-* 就按这个
-* 继续
-* 开始规划
-* proceed
-* approved
+1. 没有方案时，使用其“新方案制定”流程。
+2. 已有方案但缺少可核验状态或证据时，使用其“已有方案审查”流程；需要实质修订时形成新的可识别版本。
+3. 已有同一确切版本的有效结果时复用，不重复生成或重复确认。
 
-If the user provides corrections, revise the proposal and ask for confirmation again.
+状态标签是必要条件，不是充分证据。复用前必须取得 [handoff-contracts.md](references/handoff-contracts.md) 规定的完整 Planning Handoff，并核对其来源、仓库证据和 revision。用户或文档仅声称“已确认”“通过”，却缺少范围、保持不变项、验收来源、实施步骤、验证、风险或回滚时，不得据此进入编排；使用 `solution-planner` 补充审查，或保持 `plan_blocked` 并请求缺失材料。
 
-## Gate 2: Agent / Worktree Plan Confirmation
+`solution-planner` 的“新方案制定”直接提供 `decision_status/confirmation_basis`。“已有方案审查”提供 `source_decision_status/source_confirmation_basis`；只把可核验的来源状态归一化为只读的 `effective_decision_status/effective_confirmation_basis`。审查建议本身没有确认状态；需要形成修订方案时先按其规则产生并确认新的 `plan_revision`。
 
-After the solution is confirmed, produce an agent/worktree plan.
+进入编排必须同时满足：
 
-The plan must include:
+- `contract_status=就绪`
+- `quality_status=通过` 或 `有条件通过`
+- `effective_decision_status=已确认`
+- `plan_revision` 和 `effective_confirmation_basis` 可识别
+- `open_questions` 中不存在会改变方向的关键问题
 
-* Task decomposition
-* Dependency graph
-* Required contracts
-* Proposed coder agents
-* Proposed reviewer agents
-* Proposed integrator agent
-* Worktree names
-* Branch names
-* Which documents each future agent should read
-* Context loading plan
-* Merge order
+`quality_status=有条件通过` 时，把每个待处理项转换为带 owner、`must_close_before=dispatch|branch_review|integration`、适用对象、关闭条件、`required_proof_kinds`、预声明 `proof_requirements` 和摘要绑定证据的编排前置项。条件未到允许的最晚阶段仍未关闭时，不得通过对应门禁。
 
-Then ask the user to confirm or modify the plan.
+方案阶段的确认就是方案确认门；本 Skill 不再创建第二套 Gate 1。
 
-Do not generate `.ai/` markdown documents until the user confirms this plan.
+### 2. 判断是否值得并行
 
-Accept confirmations such as:
+至少检查：
 
-* 确认
-* 可以
-* 就按这个
-* 生成md
-* 生成文档
-* proceed
-* approved
+- Planning Handoff 是否包含实际仓库、相关源码、测试、构建入口和依赖边界的可定位证据。
+- 是否存在两个以上可以独立交付或在稳定契约后独立编码的任务。
+- 共享文件、公共接口和状态热点是否有单一 owner。
+- 依赖是否能用明确的 `unblocks_on` 条件表达。
+- 并发容量是否足以容纳实现任务以及 `local-pr-review` 内部的 Review Agent。
+- 预计节省是否大于 worktree、交接、Review 和冲突处理成本。
 
-If the user provides corrections, revise the plan and ask for confirmation again.
+代码行数只能作为规模信号，不能单独决定并行。若并行收益不足，降级为同一已确认方案下的单 worktree 分阶段执行；这属于执行模式选择，不属于 capability fallback。
 
-## Gate 3: Documentation Generation
+无法访问目标仓库、未定位真实模块和共享热点时，不得确认并行资格、文件所有权或可执行 worktree 方案。可以列出待调研项，但保持 `orchestration_blocked`，不生成可确认的 `orchestration_revision`。
 
-Only after Gate 2 is confirmed, generate or update the `.ai/` documents.
+### 3. 形成编排方案
 
-If file editing is available, create the actual files.
+从 Planning Handoff 生成带 `orchestration_revision` 的编排方案，至少包含：
 
-If file editing is not available, output the exact file paths and file contents.
+- 任务 DAG、每条边的类型和 `unblocks_on`
+- 每个任务的范围、禁止范围、结构化 AC 映射、带 AC 映射的测试和交付物
+- 共享契约的确切 revision、生产者、消费者和变更策略
+- 文件所有权矩阵，共享路径默认单写者
+- 冻结到 manifest 的 task/integration `allowed_paths` 和唯一 `merge_order`
+- Agent 角色、并发预算和上下文加载范围
+- worktree、branch、目标分支、基线和集成顺序
+- 每个分支及最终集成分支的 `local-pr-review` 调用计划
+- 失败、重规划、恢复和清理策略
 
----
+契约语义必须在编排确认前形成；确认后只能原样生成文档。任务边界、依赖、worktree 或方案边界内的任务间契约发生实质变化时，递增 `orchestration_revision`、失效旧编排确认并重新确认。若变化触及方案拥有的范围、公共行为、数据、安全、兼容、核心验收或回滚语义，必须先升级 `plan_revision` 并失效旧方案确认；纯描述、链接等非语义元数据变化不得伪装成契约语义变化。
 
-# Core Principles
+编排层只能把已确认的设计决策具体化为任务间契约，不能新增方案未决定的格式、版本策略、错误语义、兼容行为、迁移或生命周期规则。若这些语义缺失，或编排暴露的问题改变方案范围、架构、公共行为、数据、安全、兼容、核心验收或回滚，停止编排，升级 `plan_revision` 并返回 `solution-planner`。
 
-## Contract First
+### 4. 请求编排确认
 
-Define interfaces and shared contracts before parallel implementation begins.
+展示确切的 `plan_revision`、`orchestration_revision`、契约 revision、任务图、文件所有权、Agent/worktree 和 merge 顺序，请用户确认或修改。
 
-Dependent tasks must not start from incompatible assumptions.
+确认只批准该编排版本，不自动授权：
 
-## Minimal Context
+- 创建或修改 `.ai/` 文件
+- 创建 branch/worktree
+- commit、merge、rebase、cherry-pick、push 或创建 PR
+- 删除 worktree、分支或其他产物
 
-Do not give every agent every document.
+### 5. 生成文档并形成规划基线
 
-Each agent should read only:
+取得文件写入授权后，生成：
 
-* Its assigned task document
-* Required contract documents
-* Shared project instructions if necessary
-* Relevant source files
-* Relevant git diff
-
-Avoid loading unrelated task context.
-
-Do not re-read the full requirement document unless generated task or contract documents are ambiguous.
-
-## Responsibility Isolation
-
-Split by responsibility, not by file.
-
-Prefer:
-
-* Data Layer
-* Service Layer
-* UI Layer
-* Rendering Layer
-* Configuration Layer
-* Test Layer
-
-Avoid:
-
-* Splitting by source file
-* Splitting by class
-* Splitting in a way that makes several agents edit the same core files unnecessarily
-
-## Review Separation
-
-Implementation and review should happen in separate conversations or separate roles.
-
-Reviewer agents should not praise code.
-
-Reviewer agents should focus on defects, risks and contract violations.
-
-## Integration by Summary First
-
-Integrator agents should not start by reading every implementation in full.
-
-They should start from:
-
-* Integration plan
-* Task completion reports
-* Diff statistics
-* Shared contracts
-* Conflict files
-* High-risk shared files
-
-Then inspect full code only when needed.
-
----
-
-# Workflow
-
-Always follow:
-
-Requirement Intake
-→ Solution Discussion
-→ Solution Confirmation
-→ Agent / Worktree Planning
-→ Agent / Worktree Plan Confirmation
-→ Contract Definition
-→ Documentation Generation
-→ Worktree Handoff
-→ Agent Bootstrap Prompt Generation
-→ Implementation
-→ Task Completion Report
-→ Independent Review
-→ Fix
-→ Integration
-→ Merge Readiness
-
-Never jump directly into coding when this skill is invoked for planning.
-
-Contracts must be defined before parallel implementation begins.
-
----
-
-# Phase 1: Requirement Intake
-
-Read all provided requirement documents and relevant project instructions.
-
-If the user has provided an existing solution, treat it as a draft.
-
-Do not blindly accept the provided solution.
-
-Validate and improve it.
-
-Produce:
-
-## Functional Requirements
-
-* Requirement A
-* Requirement B
-* Requirement C
-
-## Non-Functional Requirements
-
-* Performance requirements
-* Compatibility requirements
-* UI/UX requirements
-* Threading or concurrency requirements
-* Memory/resource requirements
-
-## Impact Analysis
-
-List likely affected areas:
-
-* Modules
-* Components
-* Public interfaces
-* Data structures
-* Configuration files
-* Build scripts
-* Tests
-
-## Risks
-
-Identify:
-
-* Architecture risks
-* Merge conflict risks
-* Compatibility risks
-* Performance risks
-* Resource lifetime risks
-* Test coverage risks
-
-Do not write implementation code in this phase.
-
----
-
-# Phase 2: Solution Discussion
-
-Present a solution proposal before planning agents.
-
-The solution proposal should include:
-
-## Requirement Understanding
-
-Summarize what needs to be implemented.
-
-## Proposed Solution
-
-Describe the intended technical solution.
-
-## Key Design Decisions
-
-List important design choices.
-
-## Alternatives
-
-When useful, compare alternatives and explain the recommended option.
-
-## Risks
-
-List major risks.
-
-## Verification Strategy
-
-Describe build, test and manual verification.
-
-## Open Questions
-
-Ask only questions that are necessary to avoid a wrong design.
-
-If assumptions are reasonable, state assumptions instead of blocking progress with excessive questions.
-
-At the end of this phase, ask for confirmation.
-
-Do not proceed until the user confirms the solution.
-
----
-
-# Phase 3: Task Decomposition
-
-After solution confirmation, split work according to responsibilities.
-
-Prefer responsibility boundaries such as:
-
-* Data acquisition
-* Statistics / calculation
-* Data model / contract
-* Rendering / UI
-* Persistence / configuration
-* Tests
-* Documentation
-
-Avoid splitting by source file or class unless the requirement is naturally limited to that file/class.
-
-Goal:
-
-* Minimize merge conflicts
-* Minimize duplicated context
-* Keep each implementation agent focused
-* Make task boundaries explicit
-
-Output:
-
-| Task | Description | Dependencies | Shared Contracts | Parallelizable        |
-| ---- | ----------- | ------------ | ---------------- | --------------------- |
-| A    | ...         | none         | ...              | yes                   |
-| B    | ...         | A            | contract-X       | yes, after contract-X |
-| C    | ...         | A,B          | contract-Y       | partial               |
-
-For each task define:
-
-* Scope
-* Owner agent
-* Expected output
-* Forbidden scope
-* Required contracts
-* Test responsibility
-
----
-
-# Phase 4: Dependency Analysis
-
-Identify relationships between tasks.
-
-Examples:
-
-A -> B
-
-A -> C
-
-D independent
-
-Classify each dependency:
-
-* Data dependency
-* API dependency
-* Event dependency
-* Build dependency
-* UI dependency
-* Test dependency
-* Configuration dependency
-
-Output a dependency graph.
-
-Example:
-
-DataProvider
-↓
-Statistics
-↓
-Renderer
-
-XMLConfig
-
-Tests
-
-For every dependency decide whether it requires a contract document.
-
-If two tasks communicate through data, API, events, files, XML, JSON or shared state, create a contract document.
-
----
-
-# Phase 5: Agent / Worktree Planning
-
-Before generating markdown documents, create the agent/worktree plan.
-
-Recommend:
-
-* Coder agents
-* Reviewer agents
-* Integrator agent
-* Worktree names
-* Branch names
-* Required task documents
-* Required contract documents
-* Context loading plan
-* Merge order
-
-Prefer one coder per independent responsibility.
-
-Use separate reviewer conversations when review quality is critical.
-
-Use one reusable reviewer conversation when tasks are small and context can be switched safely.
-
-Always include an integrator agent for multi-worktree work.
-
-Output:
-
-## Agent Plan
-
-| Agent              | Role       | Worktree             | Branch              | Reads                                 | Responsibility |
-| ------------------ | ---------- | -------------------- | ------------------- | ------------------------------------- | -------------- |
-| Statistics-Coder   | Coder      | feature-statistics   | feature/statistics  | task-statistics.md, statistics-api.md | ...            |
-| Renderer-Coder     | Coder      | feature-renderer     | feature/renderer    | task-renderer.md, render-data.md      | ...            |
-| Reviewer           | Reviewer   | target worktree      | same branch         | checklist, task, contracts, diff      | ...            |
-| Feature-Integrator | Integrator | integration worktree | feature/integration | reports, contracts, integration-plan  | ...            |
-
-## Context Loading Plan
-
-For each agent specify exactly what to read and what not to read.
-
-## Worktree Plan
-
-For each worktree output:
-
-* Purpose
-* Branch name
-* Dependencies
-* Required task documents
-* Required contract documents
-* Expected report document
-* Estimated files or modules
-* Suggested creation command if applicable
-
-At the end of this phase, ask for user confirmation.
-
-Do not generate `.ai/` markdown documents until the user confirms the agent/worktree plan.
-
----
-
-# Phase 6: Contract Definition
-
-After the agent/worktree plan is confirmed, define contracts for every dependency between tasks.
-
-Contracts may include:
-
-* Public interfaces
-* Data structures
-* Event formats
-* File formats
-* XML schema
-* JSON schema
-* Function signatures
-* Ownership/lifetime rules
-* Threading expectations
-* Error handling rules
-* Sorting rules
-* Unit/coordinate conventions
-* Compatibility requirements
-
-Examples:
-
-* RenderData
-* StatisticsAPI
-* XmlSchema
-* CacheInvalidationRules
-
-Requirements:
-
-* Be implementation independent
-* Be stable
-* Be minimal
-* Avoid leaking internal details
-* Be precise enough for parallel work
-
-For each contract define:
-
-* Purpose
-* Producer
-* Consumer
-* Inputs
-* Outputs
-* Data invariants
-* Ownership/lifetime rules
-* Threading rules
-* Error handling
-* Compatibility rules
-* Examples
-* What must not be changed by implementation agents
-
-Implementation agents must not modify contract documents unless the user explicitly approves a contract change.
-
-If implementation reveals that a contract is wrong, the agent must stop and propose a contract change instead of silently changing it.
-
----
-
-# Phase 7: Documentation Generation
-
-Generate planning documentation under:
-
+```text
 .ai/
-
+├── workflow-manifest.json
+├── solution-record.md
+├── orchestration-record.md
 ├── tasks/
 ├── contracts/
-├── review/
 ├── reports/
 └── merge/
+```
 
-Create task documents:
+`workflow-manifest.json` 和上述 Markdown 是不可变规划内容；不要把提交后才知道的 SHA、任务状态或 Review 结果写回其中。在 manifest 和每份文档中记录 `workflow_id`、相关 revision、来源和 `supersedes`。为每个任务预先复制并填写 `.ai/reports/<TASK-ID>-summary.md` 报告骨架，让隔离 Agent 只凭 task 文档即可定位。正式阶段从 `PLAN_SHA` 读取并核对这些 blob；仅证明路径存在不构成内容绑定，同 revision 内容漂移必须失败。
 
-.ai/tasks/task-A.md
+一旦建立 `workflow_id` 且取得外部状态文件写入授权，就创建单写者运行态账本，从 `planning` 起追加状态转换；若此时才落盘，必须根据已保存的确认和产物证据补全到当前状态，不得伪造或丢弃历史。优先使用用户指定的持久状态目录；仅限同一会话内的短流程可以使用系统临时目录。不可变规划内容只记录稳定 `runtime_state_id`，实际目录由 bootstrap prompt 传递，并可按迁移协议重绑定。它们不进入待审代码提交。运行态目录不可访问且无法验证恢复时停止交接。执行：
 
-.ai/tasks/task-B.md
+```bash
+python3 <skill-dir>/scripts/validate_workflow.py \
+  --root <repo> \
+  --state <runtime-state.json> \
+  --phase planning
+```
 
-.ai/tasks/task-C.md
+需要独立 worktree 时，必须按 Git 生命周期参考先形成所有分支都能继承的 `PLAN_SHA`。用户未授权规划基线提交、且没有另一种经过验证的同步方式时，停止 worktree 交接，不得宣称任务可立即开始。
 
-Create contract documents:
+形成 `PLAN_SHA` 后，只把 SHA 写入外部运行态账本，不修改规划提交中的 manifest。在启动任务前，取得项目要求的只读 Git 授权并执行 `--phase dispatch --check-git` 校验。
 
-.ai/contracts/contract-1.md
+### 6. 启动实现任务
 
-.ai/contracts/contract-2.md
+优先使用当前会话的原生子 Agent 承担有界实现任务；只有原生能力不可用或用户明确要求时，才生成供独立会话使用的 bootstrap prompt。不要用新建用户任务代替当前工作流的内部子任务。
 
-Create review document:
+每个实现 Agent 只读取：
 
-.ai/review/review-checklist.md
+- 项目指令
+- 自己的 task 文档和已生成的 task report 骨架
+- 依赖的确切 contract revisions
+- 相关源码、测试和构建入口
 
-Create report templates:
+不得默认读取其他任务或整份原始需求。若压缩文档与已确认方案冲突，以确切 `plan_revision` 为准并暂停上报。
 
-.ai/reports/task-report-template.md
+启动每个实现 Agent 前，按项目规则取得绑定 `task_id`、`orchestration_revision` 和允许路径的源码写入授权，并记录 `implementation_write_authorization_basis`。Fix 超出原允许路径、契约或范围时必须停止并重新授权；Integrator 的冲突解决或手工代码修改也需要绑定文件和 Integration SHA 的写入授权。
 
-Create merge document:
+实现完成后，在取得相应 Git 授权的前提下形成固定 `TASK_HEAD_SHA`。首次提交以及每次 Fix 的 staging/commit 都必须重新记录绑定当前 task、`orchestration_revision`、worktree、差异路径和具体 commit 的 `commit_authorizations`；授权路径必须是不可变 manifest 中 `allowed_paths` 的子集，不得把旧 HEAD 的授权扩展到新差异。提交内的任务报告不记录自身最终 SHA，外部运行态把报告路径与 `TASK_HEAD_SHA`、commit list 和 clean 证据绑定。每个 `required_tests` 必须在外部 test result 中以确切 `test_id/command/exit_code/status/result` 留证并绑定 `TASK_HEAD_SHA`；task report 仅提到测试 ID 不能代替执行证据。未提交、工作区不干净、存在未处置风险/TODO/范围偏移，或报告与 HEAD 不一致的任务不能进入正式 Review。
 
-.ai/merge/integration-plan.md
+### 7. 执行分支 Review
 
-## Task documents must contain
+`local-pr-review` 可用时，由它独占 Review 的多 Agent 和汇总流程。本 Skill 不再创建额外 Reviewer Agent，也不同时调用其原生模式与脚本模式。
 
-* Task name
-* Scope
-* Responsibilities
-* Deliverables
-* Required contracts
-* Allowed files or modules
-* Forbidden changes
-* Build requirements
-* Test requirements
-* Acceptance criteria
-* Expected task completion report path
+为每个任务从已确认方案和任务文档映射 Review Scope Contract，传入固定的已提交 base/head。内部路由到 `local-pr-review` 不自动产生 Git 授权；先遵守项目规则取得并记录 `read_only_git_authorization_basis`。至少绑定：
 
-## Contract documents must contain
+- `plan_revision`、`orchestration_revision`
+- task ID 和 contract revisions
+- 对应 `AC-*`
+- `in_scope`、`out_of_scope`、保持不变项和集成约束
+- `TASK_START_SHA/REVIEW_BASE_SHA`、`merge_base_sha`、`TASK_HEAD_SHA`
 
-* Interface definitions
-* Data structures
-* Behavioral rules
-* Compatibility requirements
-* Ownership rules
-* Threading expectations if applicable
-* Error handling rules
-* Examples
-* Contract change policy
+确认后的完整 Scope Contract、其人类可读 revision、`fail_on` 阈值和按 `local-pr-review` 规范化算法计算的 `scope_id` 必须冻结在不可变 manifest；Scope sources 至少包含当前 `plan_revision`。Review 时原样传递 contract，不从 diff 重新推导，也不接受运行态自报的另一份范围。编排器传入的固定 `base_sha` 和冻结的阈值是显式、已确认的 Review 输入，调用 `local-pr-review` 时必须优先使用并跳过 PR/默认分支自动探测；脚本模式传 `--base <fixed-base-sha> --fail-on <frozen-threshold>`。
 
-## Review checklist must contain
+Task Scope 的 `acceptance_criteria` 必须精确等于该 task 在 manifest 中分配的 AC ID 集合，最终 integration Scope 必须精确覆盖当前 plan 的全部 AC；描述性内容从当前 AC catalog 和 in_scope 读取，不能用改写后的自由文本替换稳定 ID。
 
-* Correctness checks
-* Performance checks
-* Resource checks
-* Contract compliance checks
-* Regression checks
-* Edge-case checks
-* Build/test checks
+只有最终集成 Review 使用工作流目标基线 `WORKFLOW_BASE_SHA`。下游任务从已审查上游 HEAD 派生时，不得把全局基线误作该任务 Review base。
 
-## Integration plan must contain
+Review Result 必须证明五类视角全部完成、汇总模式、实际引擎/模型/推理强度和固定快照。编排器按 `scope_relation + change_relation + fail_on` 独立重算 blockers；既有未恶化、范围外或归因不确定项进入告知，不得仅因严重度阻断，也不得把本次可归因的高优先级 finding 填入非阻断数组绕过。
 
-* Merge order
-* Dependency order
-* Shared contracts
-* Expected conflict areas
-* Integration verification steps
-* Rollback strategy if needed
+Review 阻断时进入 `Fix → 重新取得 staging/commit 授权 → 新 commit → 新 HEAD → Re-review`。Scope Contract 未变化时保留同一 `scope_id`，但旧 HEAD 的 Review 结果失效。`PLAN_SHA` 形成后 Scope Contract 默认不可变；内容或 `fail_on` 变化都属于编排变更，必须升级并重新确认 `orchestration_revision`、生成新的 manifest 和 `PLAN_SHA`，追加带 old/new revision、old/new PLAN_SHA、原因及失效 task 集合的 `rebaseline` 事件；不得改写旧历史。实现者不能自行把 finding 标记为已验证关闭。Review 不完整、视角失败、scope_id 不一致或快照变化时，任务状态为 `review_incomplete`，不得进入集成。
 
-Important:
+任务 Review 通过并更新外部运行态账本后，执行 `--phase branch-ready --task-id <TASK-ID> --check-git` 校验。运行态中的 Review、测试和集成证据使用相对状态目录的 `{path,sha256}` 引用；引用目标必须真实可读、摘要一致并与 workflow/revision/scope/fixed SHA 逐项匹配。
 
-Each implementation agent should read only the task documents and contract documents relevant to its work.
+多个分支 Review 按可用并发容量调度。先释放不再需要的实现 Agent，避免外层分支并发与 `local-pr-review` 内部多 Agent 无界嵌套。
 
-Avoid loading unrelated task context.
+### 8. 集成并执行最终 Review
 
----
+Integrator 从 integration plan、固定 task handoff、Review 结果和契约开始；跨分支报告按 Git 生命周期参考从确切提交读取，不假设当前 worktree 能直接看到其他分支文件。
 
-# Phase 8: Context Budget Rules
+开始集成前执行 `--phase integration-ready --check-git`，证明全部任务已审查、集成前条件已关闭且顺序符合冻结的 `merge_order`。每次只集成一个已就绪任务，核对依赖顺序、契约、重复实现和共享文件，随后在当前固定 Integration SHA 上运行规定验证。冲突、测试失败或契约不一致时停止并进入恢复或重规划，不自动执行破坏性恢复。
 
-Minimize repeated token usage.
+集成完成后：
 
-Agents must not read all generated documents by default.
+1. 固定 `INTEGRATION_HEAD_SHA`。
+2. 在同一 SHA 上完成集成测试。
+3. 使用 `local-pr-review` 审查目标基线到该 SHA 的最终差异，重点覆盖冲突解决、Integrator 修改、共享接口和跨分支交互。
+4. 任一代码变化都会使该 SHA 的测试和最终 Review 结果失效。
 
-## Implementation agents should read only
+### 9. 判定 Merge Readiness
 
-* Assigned task document
-* Required contract documents
-* Shared project instructions if necessary
-* Relevant source files
-* Relevant tests
+仅在以下条件全部满足时输出 `MERGE_READY`：
 
-They must not read unrelated task documents unless a dependency explicitly requires it.
+- 所有必需任务位于可验证的 reviewed HEAD。
+- 所有阻断 finding 已由独立 Review 验证关闭，或由有权限者按规则接受风险。
+- 集成 build/test 与最终 Review 绑定同一 `INTEGRATION_HEAD_SHA`。
+- 契约和任务 revision 均为当前版本，没有 `stale` 消费者。
+- 没有未授权范围扩张、临时代码或未处置的关键风险。
 
-## Reviewer agents should read only
+否则输出 `NOT_READY`，列出阻塞项、owner、恢复步骤和关闭证据。随后单独请求最终 merge、push、PR、发布或清理授权。
 
-* Review checklist
-* Relevant task document
-* Relevant contract documents
-* Current branch diff
-* Files touched by the current branch
-* Task completion report if available
+输出结论前执行 `--phase merge-ready --check-git` 校验；校验失败、缺少运行态账本或 Git 关系证据时必须输出 `NOT_READY`。
 
-Reviewer agents should read unrelated tasks only when the diff crosses task boundaries.
+## 变更与失败处理
 
-## Integrator agents should start from
+使用状态机参考中的失效矩阵。核心规则：
 
-* .ai/merge/integration-plan.md
-* .ai/reports/task-*-summary.md
-* git diff --stat for each branch
-* Shared contract documents
-* Conflict files
-* Shared interface files
+- 上游任务失败或变为 `stale` 时，阻塞所有尚未满足 `unblocks_on` 的下游任务。
+- `orchestration_revision` 实质变化时，把所有受影响任务及其实现、测试、handoff、Review 和集成资格标记为 `stale`，逐项判断证据能否复用。
+- 契约 revision 变化时，已启动或完成的 producer、直接及传递消费者以及基于其 HEAD/checkpoint 的下游必须标记 `stale`，重新读取、复核、测试并更新报告。
+- Agent 中断或部分失败时，记录可复用产物、不可复用产物、替代 owner 和重新验证范围。
+- 不用 fallback 掩盖待澄清、质量阻塞、Review 阻断、环境错误或权限拒绝。
 
-Integrator agents should not load full task implementation details unless summaries, diffs or conflicts indicate risk.
+## 最终输出
 
-## Requirement document reuse
+报告：
 
-Do not load the original full requirement document again unless:
-
-* A generated task document is ambiguous
-* A generated contract is incomplete
-* Acceptance criteria are missing
-* The user requests re-analysis
-
-Prefer generated task and contract documents as compressed context.
-
----
-
-# Phase 9: Worktree Handoff
-
-After documentation generation, tell the user exactly which worktrees to create.
-
-For each worktree provide:
-
-* Worktree name
-* Branch name
-* Purpose
-* Suggested command
-* Assigned coder prompt
-* Reviewer prompt for that branch
-* Required documents
-
-Example:
-
-git worktree add ../feature-statistics -b feature/statistics
-
-Do not assume the skill can automatically create Codex UI conversations.
-
-The user may manually create or fork worktree conversations.
-
----
-
-# Phase 10: Agent Bootstrap Prompt Generation
-
-Generate startup prompts for every implementation agent, reviewer agent and integrator agent.
-
-The user should be able to copy each prompt into a new worktree conversation without additional planning.
-
-## For every implementation agent generate
-
-### Agent Name
-
-Example:
-
-Statistics-Coder
-
-### Worktree
-
-Example:
-
-feature-statistics
-
-### Read
-
-List all required task documents.
-
-List all required contract documents.
-
-List any required project instruction files.
-
-### Responsibilities
-
-Clearly define scope.
-
-### Restrictions
-
-Explicitly list forbidden modifications.
-
-### Startup Prompt
-
-Provide a ready-to-copy prompt.
-
-Example:
-
-Read:
-
-.ai/tasks/task-statistics.md
-
-.ai/contracts/statistics-api.md
-
-Implement the assigned task.
-
-Requirements:
-
-* Follow all contracts
-* Build successfully
-* Run related tests
-* Do not modify contracts
-* Do not modify unrelated modules
-* Generate the required task completion report
-
-## For every reviewer generate
-
-### Reviewer Name
-
-Example:
-
-Statistics-Reviewer
-
-### Read
-
-* .ai/review/review-checklist.md
-* Relevant task document
-* Relevant contract documents
-* Current git diff
-* Task completion report if available
-
-### Startup Prompt
-
-Review current branch changes.
-
-Focus on:
-
-* Correctness
-* Contract compliance
-* Edge cases
-* Resource leaks
-* Performance regressions
-* Missing tests
-* Unintended scope expansion
-
-Do not modify code.
-
-Do not praise code.
-
-Output only:
-
-## Critical
-
-## Major
-
-## Minor
-
-## Suggestions
-
-## For integrator generate
-
-### Integrator Name
-
-Example:
-
-Feature-Integrator
-
-### Read
-
-* .ai/merge/integration-plan.md
-* .ai/reports/task-*-summary.md
-* Shared contract documents
-* Diff statistics for each branch
-
-### Startup Prompt
-
-Integrate completed task branches according to the integration plan.
-
-Start from summaries and diff statistics.
-
-Inspect full code only when needed for conflicts, shared interfaces or high-risk changes.
-
-Verify:
-
-* Merge order
-* Contract compliance
-* Build success
-* Test success
-* No duplicated implementation
-* No temporary code
-
----
-
-# Phase 11: Implementation Agent
-
-Inside a worktree:
-
-1. Read assigned task documents
-2. Read required contract documents
-3. Read only relevant source code and tests
-4. Implement task
-5. Build project
-6. Run tests
-7. Self-check
-8. Generate task completion report
-
-Rules:
-
-* Do not invoke this skill again unless the assigned task itself must be decomposed into another multi-agent workflow
-* Do not modify contracts
-* Do not expand task scope
-* Do not modify unrelated modules
-* Do not read unrelated task documents without a reason
-* Do not silently change public interfaces
-
-Before finishing verify:
-
-* Correctness
-* Performance
-* Edge cases
-* Resource leaks
-* Contract compliance
-* Build success
-* Related test success
-
-If the task cannot be completed because a contract is insufficient, stop and produce a contract-change proposal.
-
----
-
-# Phase 12: Task Completion Report
-
-At the end of each implementation task, generate:
-
-.ai/reports/task-X-summary.md
-
-The report must include:
-
-* Task name
-* Branch/worktree name
-* Implemented changes
-* Modified files
-* New files
-* Deleted files
-* Contracts used
-* Contract changes proposed, if any
-* Tests run
-* Build result
-* Known risks
-* Follow-up work
-* Notes for reviewer
-* Notes for integrator
-
-The report should be concise.
-
-Its purpose is to reduce repeated token consumption for reviewers and integrators.
-
----
-
-# Phase 13: Independent Review Agent
-
-Reviewer acts as a separate engineer.
-
-Assume production deployment tomorrow.
-
-Read only:
-
-* .ai/review/review-checklist.md
-* Relevant task document
-* Relevant contract documents
-* Current git diff
-* Task completion report if available
-
-Review:
-
-* Bugs
-* Race conditions
-* Memory leaks
-* Resource leaks
-* Performance regressions
-* Missing tests
-* Contract violations
-* Architecture violations
-* Unintended scope expansion
-* Compatibility breaks
-
-Never praise code.
-
-Never summarize positives.
-
-Do not modify code unless explicitly asked.
-
-Output only:
-
-## Critical
-
-## Major
-
-## Minor
-
-## Suggestions
-
-If the review requires more context, ask for the specific file or document needed instead of loading all documents.
-
----
-
-# Phase 14: Fix
-
-Implementation agent fixes review findings.
-
-For each issue provide:
-
-* Root cause
-* Fix
-* Verification
-
-Re-run build and tests.
-
-Update the task completion report with:
-
-* Review issues fixed
-* Additional files modified
-* Additional tests run
-* Remaining risks
-
-Do not expand task scope during fix unless required to resolve a review finding.
-
----
-
-# Phase 15: Integration
-
-Integrator merges completed branches according to the integration plan.
-
-Start from:
-
-* .ai/merge/integration-plan.md
-* .ai/reports/task-*-summary.md
-* Shared contracts
-* Diff statistics
-
-Then inspect:
-
-* Conflict files
-* Shared interface files
-* High-risk files
-* Files modified by multiple branches
-
-Integrator responsibilities:
-
-* Merge in dependency order
-* Resolve conflicts
-* Verify contract compliance
-* Detect duplicated implementation
-* Detect inconsistent assumptions across tasks
-* Run build and tests after integration
-
-Integrator must not rewrite large portions of feature code unless required for conflict resolution or contract compliance.
-
-If integration reveals incompatible task assumptions, report the incompatibility and propose the smallest correction.
-
----
-
-# Phase 16: Merge Readiness
-
-Before final merge verify:
-
-* Build success
-* Tests pass
-* Contract compliance
-* Integration plan completed
-* Review findings addressed
-* Task completion reports updated
-* No temporary code
-* No debug logging
-* No commented dead code
-* No duplicated implementation
-* No unintended file changes
-* No unresolved TODOs introduced by the task unless explicitly accepted
-
-Output:
-
-MERGE_READY
-
-or
-
-NOT_READY
-
-If NOT_READY, include:
-
-* Blocking issues
-* Required fixes
-* Owner task/branch
-* Verification needed
-
----
-
-# Final Deliverables
-
-After Gate 2 confirmation, the workflow must finish by generating:
-
-## Documents
-
-.ai/tasks/*
-
-.ai/contracts/*
-
-.ai/review/*
-
-.ai/reports/task-report-template.md
-
-.ai/merge/*
-
-## Solution Record
-
-A concise record of the confirmed solution.
-
-## Dependency Graph
-
-Task dependency graph.
-
-## Contract Map
-
-Which task produces and consumes each contract.
-
-## Worktree Plan
-
-Recommended worktree structure.
-
-## Agent Plan
-
-Implementation agents.
-
-Review agents.
-
-Integrator agent.
-
-## Context Loading Plan
-
-For each agent specify exactly which documents it should read.
-
-## Bootstrap Prompts
-
-Ready-to-use prompts for:
-
-* Every implementation agent
-* Every reviewer agent
-* Integrator agent
-
-## Merge Plan
-
-* Merge order
-* Conflict risks
-* Verification steps
-
-The user should be able to:
-
-1. Create worktrees
-2. Open new conversations
-3. Copy the generated bootstrap prompt
-4. Start implementation immediately
-5. Review each branch with minimal repeated context
-6. Integrate branches using summaries and targeted diffs
-
-without additional planning.
-
----
-
-# Behavior Summary
-
-When the user says:
-
-parallel-feature-workflow 替我实现 xxxx
-
-Do this:
-
-1. Analyze the requirement.
-2. Propose or improve the solution.
-3. Ask for solution confirmation.
-4. After confirmation, create the agent/worktree plan.
-5. Ask for plan confirmation.
-6. After confirmation, generate `.ai/` markdown documents.
-7. Tell the user which worktrees to create.
-8. Tell each coder/reviewer/integrator exactly which documents to read.
-9. Generate copy-ready prompts for all future conversations.
-
-Do not skip the confirmation gates unless the user explicitly says to skip confirmation.
-:::
+- `workflow_id`
+- `planning_engine`、方案三个状态及 `plan_revision`
+- `orchestration_revision`
+- `review_engine`、每个 `scope_id`、固定 SHA、实际模型和推理强度（继承或覆盖依据）
+- 任务、契约、Review、集成和验证状态
+- fallback 原因、覆盖缺口和剩余风险
+- `MERGE_READY` 或 `NOT_READY`
+- 仍需用户授权的精确动作

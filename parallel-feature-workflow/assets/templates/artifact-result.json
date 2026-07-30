@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "workflow_id": "{{WORKFLOW_ID}}",
+  "plan_revision": "{{PLAN_REVISION}}",
+  "orchestration_revision": "{{ORCHESTRATION_REVISION}}",
+  "subject_id": "{{ARTIFACT_SUBJECT_ID}}",
+  "status": "pending",
+  "source_sha": null,
+  "artifacts": [
+    {
+      "path": "{{ARTIFACT_PATH}}",
+      "sha256": "{{GIT_BLOB_CONTENT_SHA256}}"
+    }
+  ]
+}
