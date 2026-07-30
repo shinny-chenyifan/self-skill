@@ -1,4 +1,4 @@
 interface:
   display_name: "方案质量规划"
-  short_description: "通过证据调研、质量门禁与失败反演生成可执行的软件实施方案"
-  default_prompt: "使用 $solution-planner 调研当前需求，并输出通过完整性门禁的实施方案。"
+  short_description: "通过证据调研、质量门禁与失败反演制定或审查可执行的软件方案"
+  default_prompt: "使用 $solution-planner 先调研并确认任务边界，再制定或审查方案，执行完整性门禁并如实报告结论。"
