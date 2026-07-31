@@ -1,0 +1,26 @@
+name: Skill compatibility
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os:
+          - windows-latest
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Verify skill files
+        run: python -c "from pathlib import Path; files = [Path(name) / 'SKILL.md' for name in ('local-pr-review', 'parallel-feature-workflow', 'solution-planner')]; [path.read_text(encoding='utf-8') for path in files]"
+      - name: Test local-pr-review
+        run: python -m unittest discover -s local-pr-review/tests -v
+      - name: Test parallel-feature-workflow
+        run: python -m unittest discover -s parallel-feature-workflow/tests -v

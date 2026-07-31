@@ -156,10 +156,21 @@ description: 为跨模块、多子任务或大型重构编排从已确认方案�
 
 一旦建立 `workflow_id` 且取得外部状态文件写入授权，就创建单写者运行态账本，从 `planning` 起追加状态转换；若此时才落盘，必须根据已保存的确认和产物证据补全到当前状态，不得伪造或丢弃历史。优先使用用户指定的持久状态目录；仅限同一会话内的短流程可以使用系统临时目录。不可变规划内容只记录稳定 `runtime_state_id`，实际目录由 bootstrap prompt 传递，并可按迁移协议重绑定。它们不进入待审代码提交。运行态目录不可访问且无法验证恢复时停止交接。执行：
 
+macOS/Linux：
+
 ```bash
 python3 <skill-dir>/scripts/validate_workflow.py \
   --root <repo> \
   --state <runtime-state.json> \
+  --phase planning
+```
+
+Windows PowerShell：
+
+```powershell
+python "<skill-dir>\scripts\validate_workflow.py" `
+  --root "<repo>" `
+  --state "<runtime-state.json>" `
   --phase planning
 ```
 

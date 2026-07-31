@@ -869,6 +869,21 @@ class MarkdownTests(unittest.TestCase):
 
 
 class ExecutionGateTests(unittest.TestCase):
+    def test_codex_prefix_uses_resolved_windows_launcher(self):
+        executable = r"C:\Users\example\AppData\Roaming\npm\codex.CMD"
+        with mock.patch.object(
+            review.shutil,
+            "which",
+            return_value=executable,
+        ):
+            command = review.codex_prefix(
+                Path(r"C:\repo"),
+                "test-model",
+                "medium",
+            )
+
+        self.assertEqual(command[0], executable)
+
     def test_unconfirmed_scope_never_checks_or_invokes_codex(self):
         contract = valid_scope_contract()
         contract["status"] = "draft"

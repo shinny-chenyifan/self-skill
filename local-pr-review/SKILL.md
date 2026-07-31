@@ -87,22 +87,26 @@ Agent 不得自行输出或决定 `blocking`。主任务或脚本仅在 finding 
 
 默认执行一次五视角审查：
 
+macOS/Linux：
+
 ```bash
 python3 "${CODEX_HOME:-$HOME/.codex}/skills/local-pr-review/scripts/review.py" \
   --repo "<仓库路径>" \
   --scope-file "<已确认范围契约.json>"
 ```
 
+Windows PowerShell：
+
+```powershell
+$codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME ".codex" }
+python (Join-Path $codexHome "skills\local-pr-review\scripts\review.py") `
+  --repo "<仓库路径>" `
+  --scope-file "<已确认范围契约.json>"
+```
+
 用户明确提供目标分支时追加 `--base "<目标分支>"`。
 
-深度审查会重新读取代码验证候选并执行 gap search：
-
-```bash
-python3 "${CODEX_HOME:-$HOME/.codex}/skills/local-pr-review/scripts/review.py" \
-  --repo "<仓库路径>" \
-  --scope-file "<已确认范围契约.json>" \
-  --deep
-```
+深度审查会重新读取代码验证候选并执行 gap search；在对应平台命令末尾追加 `--deep`。
 
 只有用户明确要求多轮独立审查时才追加 `--passes 2`。默认并发数为 5；遇到限流时可降低为 `--jobs 3`。
 

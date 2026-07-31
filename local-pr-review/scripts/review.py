@@ -196,9 +196,11 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def require_command(name: str) -> None:
-    if shutil.which(name) is None:
+def require_command(name: str) -> str:
+    command = shutil.which(name)
+    if command is None:
         raise ReviewError("未找到命令：{}".format(name))
+    return command
 
 
 def resolve_session_execution() -> Tuple[str, str]:
@@ -471,7 +473,7 @@ def ensure_snapshot_unchanged(snapshot: Dict[str, Any], allow_dirty: bool) -> No
 
 def codex_prefix(repo: Path, model: str, effort: str) -> List[str]:
     command = [
-        "codex",
+        require_command("codex"),
         "exec",
         "-C",
         str(repo),
