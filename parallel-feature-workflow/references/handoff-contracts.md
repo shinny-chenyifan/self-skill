@@ -342,7 +342,7 @@ Integrator 至少读取：
 
 `path` 相对 `runtime-state.json` 所在目录且不得越界。正式校验必须读取普通非空文件、复算摘要并验证内部 workflow、revision、scope、subject 和 fixed SHA；只有非空字符串、不可读文件或未验证 URL 都不能支持 readiness。任务提交内报告例外：使用精确的 `git:<TASK_HEAD_SHA>:.ai/reports/<TASK-ID>-summary.md`，并从该 Git blob 读取。
 
-迁移或接管运行态时，先停止旧写者，复制整个状态目录，校验 `runtime_state_id`、workflow/revisions、`PLAN_SHA` 以及每个证据引用的 SHA-256，再由一个新写者取得接管授权；不可验证时不得重绑定。只移动目录不改变不可变规划内容，新的绝对路径通过后续 bootstrap prompt 交接。
+迁移或接管运行态时，先停止旧写者，复制整个状态目录，校验 `runtime_state_id`、workflow/revisions、`PLAN_SHA` 以及每个证据引用的 SHA-256，再由一个新写者取得接管授权；不可验证时不得重绑定。只移动目录不改变不可变规划内容，新的绝对路径更新本地 `.ai/resume.json` 并通过后续 bootstrap prompt 补充交接。恢复定位、检查点、原始请求绑定和最终交付采用 [delivery-and-recovery.md](delivery-and-recovery.md)；不得维护第二份 plan 进度。
 
 Manifest 中的 contract 使用：
 

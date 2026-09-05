@@ -5,6 +5,32 @@
   "plan_revision": "{{PLAN_REVISION}}",
   "orchestration_revision": "{{ORCHESTRATION_REVISION}}",
   "workflow_status": "planning",
+  "checkpoint": {
+    "schema_version": 1,
+    "plan_revision": "{{PLAN_REVISION}}",
+    "orchestration_revision": "{{ORCHESTRATION_REVISION}}",
+    "writer": "{{SINGLE_WRITER}}",
+    "phase": "planning",
+    "last_completed": "{{LAST_COMPLETED_FACT}}",
+    "remaining_task_ids": [],
+    "blockers": [],
+    "next_action": "{{CONCRETE_NEXT_ACTION}}"
+  },
+  "delivery": {
+    "schema_version": 1,
+    "plan_revision": "{{PLAN_REVISION}}",
+    "orchestration_revision": "{{ORCHESTRATION_REVISION}}",
+    "status": "pending",
+    "base_sha": null,
+    "source_head_sha": null,
+    "head_sha": null,
+    "commits": [],
+    "write_authorization_basis": null,
+    "commit_authorizations": [],
+    "tests_ref": null,
+    "review": null,
+    "final_verification_ref": null
+  },
   "transition_history": [],
   "git": {
     "target_branch": "{{TARGET_BRANCH}}",

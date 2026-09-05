@@ -38,4 +38,6 @@ Read exact task HEADs, Review scope IDs, report references and integration start
 
 ## Final Authorization Boundary
 
-`MERGE_READY` is a technical conclusion for one fixed integration SHA. Merge, push, PR, release and cleanup require separate authorization.
+`MERGE_READY` is a technical conclusion for one fixed delivery SHA. Merge, push, PR, release and cleanup require separate authorization.
+
+The development integration SHA supports DEVELOPMENT_READY only. Generate clean delivery commits from the target base without inheriting .ai history, compare the full delivery tree against the development tree excluding root .ai/, and repeat required tests and the frozen-scope Review on the delivery SHA. Only validate_delivery.py can establish final PR MERGE_READY.

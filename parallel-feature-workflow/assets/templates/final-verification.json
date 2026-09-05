@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "workflow_id": "{{WORKFLOW_ID}}",
+  "subject_id": "delivery",
+  "plan_revision": "{{PLAN_REVISION}}",
+  "orchestration_revision": "{{ORCHESTRATION_REVISION}}",
+  "head_sha": null,
+  "scope_id": "{{INTEGRATION_SCOPE_ID}}",
+  "status": "pending",
+  "requirements": ["{{REQ_ID}}"],
+  "acceptance_criteria": ["{{AC_ID}}"],
+  "result": "{{PER_REQUIREMENT_IMPLEMENTATION_TEST_EVIDENCE_AND_DEVIATION_RESULTS}}"
+}

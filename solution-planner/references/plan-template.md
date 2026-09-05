@@ -9,6 +9,7 @@
 - 新方案完整模式
 - 已有方案审查
 - 影响分析
+- 已授权长任务的活动计划
 
 ## 通用规则
 
@@ -189,3 +190,41 @@
 - 代码、API、数据、配置依赖、测试文档、构建部署和运维影响矩阵
 - 兼容、迁移、安全、性能、可观测性和恢复影响
 - 每项关键影响的证据、置信度和后续验证方式
+
+## 已授权长任务的活动计划
+
+保留上述任务契约和方案基线，使用 [execution-protocol.md](execution-protocol.md) 的当前状态和追踪结构。普通短任务不强制结构化；多独立事项、跨会话或需要机械查漏时，追加唯一的 `execution-state` JSON 区块。该区块是进度权威，人类摘要只引用编号，不重复维护状态。
+
+原始请求保存为独立、摘要绑定的资料：保留原文、补充决策及版本，并附加逐项 `- REQ-1: 原始要求` 清单；初始化时对照原文确认清单完整，后续实质变更保留旧版本。不要仅保存不可访问的对话链接。
+
+以下是未开始任务的最小结构示例；填写真实路径、摘要、要求、命令与预期结果后再校验。示例中的空证据不表示通过。
+
+```execution-state
+{
+  "schema_version": 1,
+  "plan_revision": "plan-v1",
+  "objective": "填写原始目标",
+  "original_request": {"path": ".ai/task/original-request.md", "sha256": "填写真实摘要"},
+  "requirements": [{"id": "REQ-1", "acceptance_criteria": ["AC-1"]}],
+  "acceptance_criteria": [{"id": "AC-1", "statement": "填写可观察验收行为", "steps": ["STEP-1"]}],
+  "steps": [{"id": "STEP-1", "status": "NOT_STARTED", "tests": ["TEST-1"], "implementation": []}],
+  "tests": [{"id": "TEST-1", "command": "填写确切命令或人工操作", "expected": "填写通过标准", "status": "pending"}],
+  "current": {
+    "phase": "implementation",
+    "milestone": "STEP-1",
+    "status": "NOT_STARTED",
+    "last_completed": "方案已确认，尚未实现",
+    "remaining": ["STEP-1"],
+    "blockers": [],
+    "next_action": "填写具体文件和下一步验证操作"
+  },
+  "decisions": [],
+  "final_verification": null
+}
+```
+
+路径相对校验命令的 `--root`。实现快照和测试的 `snapshot` 使用 `{path,sha256}` 列表，删除项使用 `{path,deleted:true}`；验证时读取实际文件或核对删除事实。测试通过后补充 `plan_revision`、`snapshot`、`evidence={path,sha256}`，证据记录命令、环境、实际结果和未覆盖部分。跨文件依赖或夹具会影响结果时，也纳入测试快照；同一路径多次修改后刷新受影响步骤的快照和验证状态。
+
+最终核验使用 `{status,plan_revision,acceptance_criteria,snapshot,evidence}`，仅在独立核验完成后置 `status=passed`。决策使用 `{id,reason,impact,plan_revision,scope_change,status,confirmation_basis}`，按发生顺序保留；实质偏离还需 `affected_steps`，未确认时标记 `pending`，受影响步骤置 `BLOCKED` 并填写 `blocker/recovery`，撤销其相关 AC 的旧最终核验。确认后标记 `approved` 并保留依据，最新批准的范围决策必须指向活动 `plan_revision`，不能继续使用旧方案与旧测试宣告完成。`NOT_APPLICABLE` 作为逐项说明记录到验收证据，不用它跳过必需 AC 或测试。
+
+普通快照默认验证内容和删除事实；文件权限与可执行位影响行为时，每个对应快照条目还需 `mode`，例如 `"0755"`。交付门禁始终比较 Git 树的对象类型与模式。

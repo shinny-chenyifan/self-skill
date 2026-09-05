@@ -3921,6 +3921,43 @@ def _validate_artifacts(
         _require_tokens(text, tokens, f"artifacts.{field}", errors)
 
 
+def _validate_delivery_definition(manifest: dict[str, Any], errors: list[Diagnostic]) -> None:
+    """Validate the opt-in extension early; legacy v3 remains readable."""
+    if "delivery" not in manifest:
+        return
+    spec = manifest["delivery"]
+    if not isinstance(spec, dict) or type(spec.get("schema_version")) is not int or spec["schema_version"] != 1:
+        errors.append(diagnostic("E_DELIVERY_SCHEMA", "delivery schema_version must be 1"))
+        return
+    if spec.get("excluded_paths") != [".ai/"]:
+        errors.append(diagnostic("E_DELIVERY_EXCLUSIONS", "delivery v1 excludes only root .ai/"))
+    source = spec.get("original_request_ref")
+    if not isinstance(source, dict) or not is_safe_relative_path(source.get("path")) or not is_sha256(source.get("sha256")):
+        errors.append(diagnostic("E_DELIVERY_SOURCE", "original request needs a safe path and SHA-256"))
+    requirements = spec.get("requirements")
+    if not isinstance(requirements, list) or not requirements:
+        errors.append(diagnostic("E_DELIVERY_REQUIREMENTS", "original requirement inventory is required"))
+        return
+    ids: set[str] = set()
+    covered: set[str] = set()
+    criteria = set(_plan_acceptance_criteria_map(manifest))
+    for item in requirements:
+        if not isinstance(item, dict):
+            errors.append(diagnostic("E_DELIVERY_REQUIREMENTS", "requirement must be an object"))
+            continue
+        key, mapped = item.get("id"), item.get("acceptance_criteria")
+        if not is_resolved_string(key) or re.fullmatch(r"REQ-[A-Za-z0-9._-]+", key) is None or key in ids:
+            errors.append(diagnostic("E_DELIVERY_REQUIREMENTS", "requirement ID must be valid and unique"))
+        else:
+            ids.add(key)
+        if not is_str_list(mapped) or not mapped or len(mapped) != len(set(mapped)) or not set(mapped) <= criteria:
+            errors.append(diagnostic("E_DELIVERY_REQUIREMENTS", "requirement needs known unique AC references"))
+        else:
+            covered.update(mapped)
+    if covered != criteria:
+        errors.append(diagnostic("E_DELIVERY_REQUIREMENTS", "requirements must cover every plan AC"))
+
+
 def _validate_runtime_identity(
     manifest: dict[str, Any],
     runtime: dict[str, Any],
@@ -6157,6 +6194,7 @@ def validate_state(
     for field in ENGINE_RULES:
         _validate_engine(manifest, field, errors)
     _validate_plan(manifest, errors)
+    _validate_delivery_definition(manifest, errors)
     _validate_orchestration(manifest, errors)
     _validate_conditions(
         manifest,
@@ -6329,7 +6367,8 @@ def derive_merge_readiness(
         list_commits=list_commits,
         changed_paths=changed_paths,
     )
-    return "MERGE_READY" if not errors else "NOT_READY"
+    # Legacy phase names remain readable; final PR readiness belongs to delivery.
+    return "DEVELOPMENT_READY" if not errors else "NOT_READY"
 
 
 def authorization_allows(
@@ -6596,6 +6635,7 @@ def main() -> int:
                 "status": "valid",
                 "phase": args.phase,
                 "workflow_id": manifest["workflow_id"],
+                "readiness": "DEVELOPMENT_READY" if args.phase == "merge-ready" else None,
             },
             ensure_ascii=False,
             sort_keys=True,

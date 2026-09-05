@@ -32,6 +32,8 @@
 
 ## 工作流状态
 
+以下 schema v3 状态描述开发生命周期；内部 `merge_ready` 保留兼容，但对外仅表示 DEVELOPMENT_READY。最终 PR 使用 [delivery-and-recovery.md](delivery-and-recovery.md) 的 version 1 delivery 扩展，经过完整交付门禁才可输出 MERGE_READY。开发与交付 SHA、测试和 Review 不得混用。
+
 使用以下状态：
 
 - `planning`
@@ -104,6 +106,7 @@
 | task HEAD 变化 | 绑定旧 `TASK_HEAD_SHA` 的 Review、测试和 handoff | 固定新 HEAD，重跑要求的测试和 Review；Scope Contract 未变时可保留相同 `scope_id` |
 | Review Scope Contract、`scope_id` 或 `fail_on` 变化 | 当前编排确认、旧 `PLAN_SHA` 基线、受影响 task start/handoff 及旧范围下的全部 Review 结果 | 升级并重新确认 `orchestration_revision`，生成新 manifest 和 `PLAN_SHA`，重建受影响任务基线后重新 Review |
 | Integration HEAD 变化 | 绑定旧 SHA 的集成测试、最终 Review 和 readiness | 在新 SHA 上重跑全部必要验证 |
+| 开发集成、目标基线或交付 HEAD 变化 | 交付内容映射、测试、Review、反向核验和最终 PR readiness | 保留开发资料，重新形成并验证交付版本 |
 | 目标基线变化 | `WORKFLOW_BASE_SHA`、merge-base、任务分支和全部差异结论 | 停止，评估是否重建工作流或重新基线；不得静默 rebase |
 
 ## 确认与风险接受

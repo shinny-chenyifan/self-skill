@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "workflow_id": "{{WORKFLOW_ID}}",
+  "runtime_state_id": "{{RUNTIME_STATE_ID}}",
+  "state_path": "{{ABSOLUTE_PERSISTENT_RUNTIME_STATE_PATH}}"
+}

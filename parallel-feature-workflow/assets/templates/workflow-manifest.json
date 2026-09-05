@@ -2,6 +2,12 @@
   "schema_version": 3,
   "workflow_id": "{{WORKFLOW_ID}}",
   "runtime_state_id": "{{RUNTIME_STATE_ID}}",
+  "delivery": {
+    "schema_version": 1,
+    "excluded_paths": [".ai/"],
+    "original_request_ref": {"path": "original-request.md", "sha256": "{{ORIGINAL_REQUEST_SHA256}}"},
+    "requirements": [{"id": "{{REQ_ID}}", "acceptance_criteria": ["{{AC_ID}}"]}]
+  },
   "sources": ["{{SOURCE_REFERENCE}}"],
   "supersedes": null,
   "planning_engine": {

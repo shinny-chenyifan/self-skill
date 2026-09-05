@@ -2360,7 +2360,7 @@ class ReadinessTests(unittest.TestCase):
             "NOT_READY",
         )
 
-    def test_valid_evidence_is_merge_ready_without_granting_git_authorization(self):
+    def test_valid_development_evidence_does_not_claim_final_pr_readiness(self):
         graph = GitGraph()
         manifest = valid_manifest()
         runtime = valid_runtime()
@@ -2376,7 +2376,7 @@ class ReadinessTests(unittest.TestCase):
                 list_commits=graph.list_commits,
                 changed_paths=graph.changed_paths,
             ),
-            "MERGE_READY",
+            "DEVELOPMENT_READY",
         )
         self.assertFalse(
             validator.authorization_allows(runtime, "merge", SHA_D)

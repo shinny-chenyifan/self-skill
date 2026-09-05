@@ -23,10 +23,13 @@ description: 为跨模块、多子任务或大型重构编排从已确认方案�
 2. 生成任务、契约和 Agent 交接前读取 [handoff-contracts.md](references/handoff-contracts.md)。
 3. 计划或执行任何 Git/worktree 动作前读取 [git-worktree-lifecycle.md](references/git-worktree-lifecycle.md)。
 4. 仅在专职 Skill 缺失、无法加载，或用户明确禁用并选择 fallback 时读取 [fallback-protocols.md](references/fallback-protocols.md)。
+5. 跨会话恢复和生成最终 PR 交付前，完整读取 [delivery-and-recovery.md](references/delivery-and-recovery.md)。
 
 生成 `.ai/` 文档时复制并填写 `assets/templates/` 中的模板，不要重新发明结构。生成后使用 `scripts/validate_workflow.py` 校验；manifest 中的 AC catalog 是机器权威，任务、三类计划测试和 Review Scope 都必须保留可验证的 AC 覆盖关系。
 
 按阶段只读取需要的模板：规划基线使用 `workflow-manifest/solution-record/orchestration-record/task/contract/task-report/integration-plan/review-scope`；运行态初始化使用 `runtime-state`；条件、依赖、测试与 Review 留证使用 `condition-definition/condition-result/external-evidence/user-confirmation/artifact-result/test-result/review-result`；集成执行使用 `integration-execution`。
+
+长任务运行事实只写入本 Skill 的单写者账本。普通活动 `plan.md` 接入编排时核对原始需求、确认版本和已完成证据，记录切换点后停止更新原进度；方案内容保留为来源。不得同时更新两份运行态。
 
 ## 能力路由
 
@@ -67,7 +70,7 @@ description: 为跨模块、多子任务或大型重构编排从已确认方案�
 
 始终按以下顺序推进：
 
-`能力解析 → 方案形成/核验 → 并行资格判断 → 编排确认 → 文档与规划基线 → 实现交接 → 分支 Review → Fix/Re-review → 集成 → 最终 Review → Merge Readiness → 最终授权`
+`能力解析 → 方案形成/核验 → 并行资格判断 → 编排确认 → 文档与规划基线 → 实现交接 → 分支 Review → Fix/Re-review → 开发集成与 Review → 干净交付 → 交付测试与最终 Review → Merge Readiness → 最终授权`
 
 ### 1. 形成或核验方案
 
@@ -156,6 +159,8 @@ description: 为跨模块、多子任务或大型重构编排从已确认方案�
 
 一旦建立 `workflow_id` 且取得外部状态文件写入授权，就创建单写者运行态账本，从 `planning` 起追加状态转换；若此时才落盘，必须根据已保存的确认和产物证据补全到当前状态，不得伪造或丢弃历史。优先使用用户指定的持久状态目录；仅限同一会话内的短流程可以使用系统临时目录。不可变规划内容只记录稳定 `runtime_state_id`，实际目录由 bootstrap prompt 传递，并可按迁移协议重绑定。它们不进入待审代码提交。运行态目录不可访问且无法验证恢复时停止交接。执行：
 
+同时生成本地未跟踪 `.ai/resume.json` 定位入口，按恢复参考绑定账本身份和持久路径；bootstrap prompt 只是补充入口。每个接管会话先验证定位与账本，再核对实际代码和证据。里程碑结束或中断时更新外部 `checkpoint`，不要回写不可变规划文件。manifest 的 `delivery` v1 扩展必须在规划基线前冻结；它声明原始要求资料摘要、REQ→AC 映射和仅排除根 `.ai/` 的交付规则。
+
 macOS/Linux：
 
 ```bash
@@ -221,7 +226,7 @@ Review 阻断时进入 `Fix → 重新取得 staging/commit 授权 → 新 commi
 
 多个分支 Review 按可用并发容量调度。先释放不再需要的实现 Agent，避免外层分支并发与 `local-pr-review` 内部多 Agent 无界嵌套。
 
-### 8. 集成并执行最终 Review
+### 8. 集成并执行开发集成 Review
 
 Integrator 从 integration plan、固定 task handoff、Review 结果和契约开始；跨分支报告按 Git 生命周期参考从确切提交读取，不假设当前 worktree 能直接看到其他分支文件。
 
@@ -234,19 +239,25 @@ Integrator 从 integration plan、固定 task handoff、Review 结果和契约�
 3. 使用 `local-pr-review` 审查目标基线到该 SHA 的最终差异，重点覆盖冲突解决、Integrator 修改、共享接口和跨分支交互。
 4. 任一代码变化都会使该 SHA 的测试和最终 Review 结果失效。
 
-### 9. 判定 Merge Readiness
+### 9. 生成交付并判定 Merge Readiness
+
+先运行 `validate_workflow.py --phase merge-ready --check-git` 完成开发门禁。为兼容旧账本，schema v3 的内部状态名称保留 `merge_ready`，但其对外结论仅为 `DEVELOPMENT_READY`，不是最终 PR 就绪。
+
+按 [delivery-and-recovery.md](references/delivery-and-recovery.md) 从目标基线生成不继承开发规划历史的交付提交，机械核对排除根 `.ai/` 后的完整树，并在交付 SHA 上重新测试和使用已冻结的全量范围进行最终 Review。原始资料可从固定 `PLAN_SHA` 或摘要绑定的外部证据读取，不要求出现在交付提交。
 
 仅在以下条件全部满足时输出 `MERGE_READY`：
 
 - 所有必需任务位于可验证的 reviewed HEAD。
 - 所有阻断 finding 已由独立 Review 验证关闭，或由有权限者按规则接受风险。
-- 集成 build/test 与最终 Review 绑定同一 `INTEGRATION_HEAD_SHA`。
+- 开发集成 build/test 与集成 Review 绑定同一 `INTEGRATION_HEAD_SHA`。
 - 契约和任务 revision 均为当前版本，没有 `stale` 消费者。
 - 没有未授权范围扩张、临时代码或未处置的关键风险。
+- 交付内容与开发集成结果在排除根 `.ai/` 后精确一致，PR 全部新增提交及其父提交不携带 `.ai`。
+- 原始 REQ 与 AC 全集已独立反向核验，最终测试、Review 和核验绑定同一交付 SHA。
 
 否则输出 `NOT_READY`，列出阻塞项、owner、恢复步骤和关闭证据。随后单独请求最终 merge、push、PR、发布或清理授权。
 
-输出结论前执行 `--phase merge-ready --check-git` 校验；校验失败、缺少运行态账本或 Git 关系证据时必须输出 `NOT_READY`。
+输出结论前执行 `validate_delivery.py --root <交付仓库> --state <外部账本> --check-git`。它先复用开发门禁，再验证交付版本；失败、缺少恢复／交付扩展或 Git 关系证据时必须输出 `NOT_READY`。旧 schema v3 的开发校验通过不能替代该门禁。
 
 ## 变更与失败处理
 

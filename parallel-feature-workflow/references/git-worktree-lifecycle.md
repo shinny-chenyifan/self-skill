@@ -187,6 +187,8 @@ git show <TASK_HEAD_SHA>:.ai/reports/<task-id>-summary.md
 
 ## Push、PR 与清理
 
+本参考前述 merge-ready 为开发校验。最终 PR 必须先按 [delivery-and-recovery.md](delivery-and-recovery.md) 从目标基线形成不继承 `.ai` 规划历史的干净交付，再运行交付测试与范围明确的 Review。推送目标为通过交付门禁的分支和 SHA，不得推送开发规划分支作为最终 PR。
+
 `MERGE_READY` 后仍分别请求：
 
 - 合并到最终目标分支

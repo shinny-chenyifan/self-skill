@@ -24,3 +24,5 @@ jobs:
         run: python -m unittest discover -s local-pr-review/tests -v
       - name: Test parallel-feature-workflow
         run: python -m unittest discover -s parallel-feature-workflow/tests -v
+      - name: Test solution-planner
+        run: python -m unittest discover -s solution-planner/tests -v
