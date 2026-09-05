@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import threading
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 
@@ -216,7 +217,9 @@ def require_command(name: str) -> str:
     return command
 
 
-def resolve_session_execution() -> Tuple[str, str]:
+def resolve_session_execution(
+    required_fields: Sequence[str] = ("model", "effort"),
+) -> Tuple[Optional[str], Optional[str]]:
     thread_id = os.environ.get("CODEX_THREAD_ID", "").strip()
     if not thread_id:
         raise ReviewError(
@@ -235,7 +238,7 @@ def resolve_session_execution() -> Tuple[str, str]:
 
     candidates = list(sessions_dir.rglob("*{}*.jsonl".format(thread_id)))
     candidates.sort(key=lambda path: path.stat().st_mtime, reverse=True)
-    for session_file in candidates:
+    for session_file in candidates[:1]:
         model = None
         effort = None
         try:
@@ -248,22 +251,20 @@ def resolve_session_execution() -> Tuple[str, str]:
                     if event.get("type") != "turn_context":
                         continue
                     payload = event.get("payload")
+                    model = None
+                    effort = None
                     if not isinstance(payload, dict):
                         continue
                     candidate = payload.get("model")
                     candidate_effort = payload.get("effort")
-                    model = None
-                    effort = None
-                    if (
-                        isinstance(candidate, str)
-                        and candidate.strip()
-                        and candidate_effort in EFFORT_VALUES
-                    ):
+                    if isinstance(candidate, str) and candidate.strip():
                         model = candidate.strip()
+                    if candidate_effort in EFFORT_VALUES:
                         effort = candidate_effort
-        except OSError:
-            continue
-        if model and effort:
+        except (OSError, UnicodeError) as exc:
+            raise ReviewError("无法读取最新会话记录：{}".format(session_file)) from exc
+        fields = {"model": model, "effort": effort}
+        if all(fields.get(field) for field in required_fields):
             return model, effort
 
     raise ReviewError(
@@ -279,7 +280,8 @@ def resolve_execution(
     effort = explicit_effort if explicit_effort else None
     if model and effort:
         return model, effort
-    session_model, session_effort = resolve_session_execution()
+    missing = [field for field, value in (("model", model), ("effort", effort)) if not value]
+    session_model, session_effort = resolve_session_execution(missing)
     return model or session_model, effort or session_effort
 
 
@@ -399,9 +401,11 @@ def resolve_agent_roster(args: argparse.Namespace) -> Dict[str, Any]:
         requested = dict(profile)
         if len(profile) < 2:
             if session is None:
-                session = resolve_session_execution()
+                session = resolve_session_execution(required_fields=())
             for field, value in zip(("model", "effort"), session):
                 if field not in profile:
+                    if value is None:
+                        raise ReviewError("{} 无法从最新会话继承未指定字段 {}".format(agent_id, field))
                     profile[field] = value
                     basis[field] = "inherited"
         if catalog:
@@ -449,6 +453,84 @@ def roster_lines(roster: Dict[str, Any], jobs: int) -> List[str]:
         )
     lines.append("你可以按角色或单个 Agent 修改模型与推理强度；未修改就按上述配置继续。")
     return lines
+
+
+class AgentStateWriter:
+    """Serialize lifecycle updates and atomically persist the shared snapshot."""
+
+    def __init__(self, snapshot: Dict[str, Any], path: Path):
+        self.snapshot = snapshot
+        self.path = path
+        self.lock = threading.Lock()
+        self.stopped = False
+
+    def _save_locked(self) -> None:
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=self.path.parent,
+                prefix=".{}-".format(self.path.name), suffix=".tmp", delete=False,
+            ) as handle:
+                temporary = Path(handle.name)
+                json.dump(self.snapshot, handle, ensure_ascii=False, indent=2)
+                handle.write("\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, self.path)
+        except OSError as exc:
+            raise ReviewError("无法持久化 Agent 状态：{}".format(self.path)) from exc
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+
+    def save(self) -> None:
+        with self.lock:
+            self._save_locked()
+
+    def update(self, agent_id: str, status: str, evidence: str) -> None:
+        with self.lock:
+            self.snapshot["agent_roster"]["agents"][agent_id].update(
+                status=status, configuration_evidence=evidence,
+            )
+            self._save_locked()
+
+    def stop(self) -> None:
+        with self.lock:
+            self.stopped = True
+            for agent in self.snapshot["agent_roster"]["agents"].values():
+                if agent["status"] == "planned":
+                    agent.update(status="cancelled", configuration_evidence="not_started")
+                elif agent["status"] == "running":
+                    agent.update(status="interrupted", configuration_evidence="invocation_unknown")
+            self._save_locked()
+
+    def run(self, agent_id: str, action: Any, *args: Any) -> Any:
+        with self.lock:
+            if self.stopped:
+                raise concurrent.futures.CancelledError()
+            self.snapshot["agent_roster"]["agents"][agent_id].update(
+                status="running", configuration_evidence="invocation_pending",
+            )
+            # Persist intent before allowing the action to launch a subprocess.
+            try:
+                self._save_locked()
+            except BaseException as exc:
+                self.stopped = True
+                self.snapshot["agent_roster"]["agents"][agent_id].update(
+                    status="failed" if isinstance(exc, Exception) else "interrupted",
+                    configuration_evidence="not_started",
+                )
+                raise
+        try:
+            result = action(*args)
+        except Exception:
+            self.update(agent_id, "failed", "invocation_unknown")
+            raise
+        except BaseException:
+            self.update(agent_id, "interrupted", "invocation_unknown")
+            raise
+        self.update(agent_id, "completed", "cli_invocation")
+        return result
 
 
 def run_command(
@@ -1171,8 +1253,6 @@ def run_lane(
     )
 
     execution = snapshot.get("agent_roster", {}).get("agents", {}).get(task_id)
-    if execution is not None:
-        execution.update(status="running", configuration_evidence="cli_invocation")
     print("[开始] {}：{} / {}".format(task_id, model, effort), flush=True)
     result = run_command(command, timeout=timeout)
     (log_dir / "{}.stdout.log".format(task_id)).write_text(
@@ -1189,8 +1269,6 @@ def run_lane(
     validate_lane_payload(payload, lane_id, snapshot["scope_id"], task_id)
     for index, finding in enumerate(payload["findings"], 1):
         finding["candidate_id"] = "{}:{}".format(task_id, index)
-    if execution is not None:
-        execution["status"] = "completed"
     print("[完成] {}：{} 个候选问题".format(task_id, len(payload["findings"])), flush=True)
     return {
         "task_id": task_id,
@@ -1298,9 +1376,6 @@ def run_verifier(
     verifier_input = json.dumps(verifier_payload, ensure_ascii=False, indent=2)
 
     stage = "深度验证与 gap search" if deep else "快速合并与去重"
-    execution = snapshot.get("agent_roster", {}).get("agents", {}).get("aggregator")
-    if execution is not None:
-        execution.update(status="running", configuration_evidence="cli_invocation")
     print("[开始] {}：{} / {}".format(stage, model, effort), flush=True)
     result = run_command(command, stdin=verifier_input, timeout=timeout)
     (log_dir / "verifier.stdout.log").write_text(result.stdout, encoding="utf-8")
@@ -1316,8 +1391,6 @@ def run_verifier(
         lane_results=lane_results,
         deep=deep,
     )
-    if execution is not None:
-        execution["status"] = "completed"
     print("[完成] 汇总 {} 个问题".format(len(payload["findings"])), flush=True)
     return payload
 
@@ -1686,9 +1759,8 @@ def execute(args: argparse.Namespace) -> int:
     log_dir = run_dir / "logs"
     raw_dir.mkdir()
     log_dir.mkdir()
-    (run_dir / "snapshot.json").write_text(
-        json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    writer = AgentStateWriter(snapshot, run_dir / "snapshot.json")
+    writer.save()
     (run_dir / "review-scope.json").write_text(
         json.dumps(
             scope["contract"], ensure_ascii=False, sort_keys=True, indent=2
@@ -1736,31 +1808,30 @@ def execute(args: argparse.Namespace) -> int:
     failures: List[str] = []
     max_workers = min(args.jobs, len(tasks))
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_map = {
-            executor.submit(
-                run_lane,
-                task,
-                snapshot,
-                raw_dir,
-                log_dir,
-                roster["agents"]["{}-pass-{}".format(task[1], task[0])]["model"],
-                roster["agents"]["{}-pass-{}".format(task[1], task[0])]["effort"],
-                args.timeout,
-            ): task
-            for task in tasks
-        }
-        for future in concurrent.futures.as_completed(future_map):
-            task = future_map[future]
-            try:
-                lane_results.append(future.result())
-            except Exception as exc:
+        future_map = {}
+        try:
+            for task in tasks:
                 task_id = "{}-pass-{}".format(task[1], task[0])
-                roster["agents"][task_id]["status"] = "failed"
-                failures.append("{}：{}".format(task_id, exc))
-
-    (run_dir / "snapshot.json").write_text(
-        json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+                agent = roster["agents"][task_id]
+                future = executor.submit(
+                    writer.run, task_id, run_lane, task, snapshot, raw_dir, log_dir,
+                    agent["model"], agent["effort"], args.timeout,
+                )
+                future_map[future] = task
+            for future in concurrent.futures.as_completed(future_map):
+                task = future_map[future]
+                try:
+                    lane_results.append(future.result())
+                except Exception as exc:
+                    task_id = "{}-pass-{}".format(task[1], task[0])
+                    failures.append("{}：{}".format(task_id, exc))
+        except BaseException:
+            writer.stop()
+            for future in future_map:
+                future.cancel()
+            raise
+        finally:
+            writer.save()
     if failures:
         raise ReviewError("部分审查任务失败：\n- {}".format("\n- ".join(failures)))
 
@@ -1769,17 +1840,16 @@ def execute(args: argparse.Namespace) -> int:
     aggregator = roster["agents"]["aggregator"]
     print("\n".join(roster_lines({"agents": {"aggregator": aggregator}}, 1)), flush=True)
     try:
-        verified = run_verifier(
+        verified = writer.run(
+            "aggregator", run_verifier,
             snapshot, lane_results, run_dir, log_dir,
             aggregator["model"], aggregator["effort"], args.timeout, args.deep,
         )
-    except Exception:
-        aggregator["status"] = "failed"
+    except BaseException:
+        writer.stop()
         raise
     finally:
-        (run_dir / "snapshot.json").write_text(
-            json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-        )
+        writer.save()
     ensure_snapshot_unchanged(snapshot, args.allow_dirty)
 
     findings = verified["findings"]

@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import subprocess
 import tempfile
+import threading
 from types import SimpleNamespace
 import unittest
 from unittest import mock
@@ -182,7 +183,65 @@ class AgentConfigurationTests(unittest.TestCase):
             with self.assertRaises(review.ReviewError):
                 review.resolve_session_execution()
 
-    def execute_mocked(self, *, fail_lane=None, no_diff=False):
+    @contextlib.contextmanager
+    def session_context(self, payload):
+        thread_id = "11111111-1111-1111-1111-111111111111"
+        sessions = self.root / "sessions"
+        sessions.mkdir(exist_ok=True)
+        path = sessions / (thread_id + ".jsonl")
+        path.write_text(json.dumps({"type": "turn_context", "payload": payload}), encoding="utf-8")
+        with mock.patch.dict(review.os.environ, {"CODEX_HOME": str(self.root), "CODEX_THREAD_ID": thread_id}):
+            yield path
+
+    def test_only_missing_field_is_required_at_each_override_level(self):
+        for field, explicit, payload in (
+            ("effort", "high", {"model": "test-astra"}),
+            ("model", "test-astra", {"effort": "high"}),
+        ):
+            for level in ("cli", "defaults", "roles", "agents"):
+                with self.subTest(field=field, level=level):
+                    self.args.model = self.args.effort = None
+                    config = policy()
+                    profile = {field: explicit}
+                    if level == "cli":
+                        setattr(self.args, field, explicit)
+                    elif level == "defaults":
+                        config["defaults"] = profile
+                    elif level == "roles":
+                        config["roles"] = {role: profile for role in ("reviewer", "aggregator")}
+                    else:
+                        config["agents"] = {
+                            name: profile for name in
+                            [lane + "-pass-1" for lane, _ in review.REVIEW_LANES] + ["aggregator"]
+                        }
+                    self.configure(config)
+                    with self.session_context(payload):
+                        roster = review.resolve_agent_roster(self.args)
+                    for agent in roster["agents"].values():
+                        self.assertEqual((agent["model"], agent["effort"]), ("test-astra", "high"))
+
+    def test_later_agent_cannot_inherit_missing_field_from_cached_partial_context(self):
+        config = policy()
+        config["agents"] = {"correctness-pass-1": {"effort": "high"}}
+        self.configure(config)
+        with self.session_context({"model": "test-astra"}):
+            with self.assertRaisesRegex(review.ReviewError, "未指定字段 effort"):
+                review.resolve_agent_roster(self.args)
+
+    def test_partial_context_does_not_borrow_from_older_turn_or_file(self):
+        self.configure()
+        self.args.effort = "high"
+        with self.session_context({"effort": "medium"}) as latest:
+            older = latest.with_name("older-" + latest.name)
+            complete = {"type": "turn_context", "payload": {"model": "test-astra", "effort": "high"}}
+            older.write_text(json.dumps(complete), encoding="utf-8")
+            latest.write_text(json.dumps(complete) + "\n" + json.dumps({"type": "turn_context", "payload": {"effort": "medium"}}), encoding="utf-8")
+            review.os.utime(older, (1, 1))
+            review.os.utime(latest, (2, 2))
+            with self.assertRaisesRegex(review.ReviewError, "未指定字段 model"):
+                review.resolve_agent_roster(self.args)
+
+    def execute_mocked(self, *, fail_lane=None, no_diff=False, interrupt=False):
         self.configure()
         config = policy()
         config["roles"] = {"reviewer": {"model": "astra", "effort": "xhigh"}}
@@ -197,11 +256,22 @@ class AgentConfigurationTests(unittest.TestCase):
         }
         calls = []
         stdout = io.StringIO()
+        original_as_completed = review.concurrent.futures.as_completed
+
+        def completed(futures):
+            iterator = original_as_completed(futures)
+            yield next(iterator)
+            if interrupt:
+                raise KeyboardInterrupt()
+            yield from iterator
 
         def invoke(command, **kwargs):
             calls.append(command)
             self.assertIn("你可以按角色或单个 Agent 修改", stdout.getvalue())
             output = Path(command[command.index("--output-last-message") + 1])
+            on_disk = json.loads((self.root / "run/snapshot.json").read_text(encoding="utf-8"))
+            agent_id = "aggregator" if output.name == "verified-findings.json" else output.stem
+            self.assertNotEqual(on_disk["agent_roster"]["agents"][agent_id]["status"], "planned")
             if output.stem == fail_lane:
                 return subprocess.CompletedProcess(command, 2, "", "fixture failure")
             if output.name == "verified-findings.json":
@@ -212,8 +282,11 @@ class AgentConfigurationTests(unittest.TestCase):
             output.write_text(json.dumps(payload), encoding="utf-8")
             return subprocess.CompletedProcess(command, 0, "", "")
 
-        with contextlib.redirect_stdout(stdout), mock.patch.object(review, "require_command", side_effect=lambda name: name), mock.patch.object(review, "collect_snapshot", return_value=snapshot), mock.patch.object(review, "ensure_snapshot_unchanged"), mock.patch.object(review, "run_command", side_effect=invoke):
-            if fail_lane:
+        with contextlib.redirect_stdout(stdout), mock.patch.object(review, "require_command", side_effect=lambda name: name), mock.patch.object(review, "collect_snapshot", return_value=snapshot), mock.patch.object(review, "ensure_snapshot_unchanged"), mock.patch.object(review, "run_command", side_effect=invoke), mock.patch.object(review.concurrent.futures, "as_completed", side_effect=completed):
+            if interrupt:
+                with self.assertRaises(KeyboardInterrupt):
+                    review.execute(self.args)
+            elif fail_lane:
                 with self.assertRaises(review.ReviewError):
                     review.execute(self.args)
             else:
@@ -243,6 +316,97 @@ class AgentConfigurationTests(unittest.TestCase):
         self.assertEqual(snapshot["agent_roster"]["agents"]["correctness-pass-1"]["status"], "failed")
         self.assertEqual(snapshot["agent_roster"]["agents"]["aggregator"]["status"], "planned")
         self.assertFalse((self.root / "run/result.json").exists())
+
+    def test_interruption_preserves_completed_and_dispatched_state(self):
+        calls, _, _ = self.execute_mocked(interrupt=True)
+        snapshot = json.loads((self.root / "run/snapshot.json").read_text(encoding="utf-8"))
+        agents = snapshot["agent_roster"]["agents"]
+        self.assertTrue(any(agent["status"] == "completed" for agent in agents.values()))
+        for command in calls:
+            task_id = Path(command[command.index("--output-last-message") + 1]).stem
+            self.assertNotEqual(agents[task_id]["configuration_evidence"], "not_started")
+            self.assertEqual(agents[task_id]["status"], "completed")
+        self.assertEqual(agents["aggregator"]["status"], "cancelled")
+        self.assertEqual(agents["aggregator"]["configuration_evidence"], "not_started")
+        self.assertFalse((self.root / "run/result.json").exists())
+
+    def test_aggregator_interrupt_is_not_recorded_as_running_or_completed(self):
+        original = review.run_verifier
+
+        def interrupted(*args):
+            original(*args)
+            raise KeyboardInterrupt()
+
+        with mock.patch.object(review, "run_verifier", side_effect=interrupted):
+            with self.assertRaises(KeyboardInterrupt):
+                self.execute_mocked()
+        snapshot = json.loads((self.root / "run/snapshot.json").read_text(encoding="utf-8"))
+        self.assertEqual(snapshot["agent_roster"]["agents"]["aggregator"]["status"], "interrupted")
+
+    def test_atomic_snapshot_failure_preserves_previous_json(self):
+        snapshot = {"agent_roster": self.resolve()}
+        path = self.root / "snapshot.json"
+        writer = review.AgentStateWriter(snapshot, path)
+        writer.save()
+        before = path.read_bytes()
+        with mock.patch.object(review.os, "replace", side_effect=OSError("disk unavailable")):
+            with self.assertRaises(review.ReviewError):
+                writer.update("aggregator", "running", "invocation_pending")
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(list(self.root.glob(".snapshot.json-*.tmp")), [])
+
+    def test_failed_start_persistence_never_launches_or_leaves_action_running(self):
+        snapshot = {"agent_roster": self.resolve()}
+        path = self.root / "snapshot.json"
+        writer = review.AgentStateWriter(snapshot, path)
+        writer.save()
+        action = mock.Mock()
+        with mock.patch.object(review.os, "replace", side_effect=OSError("transient failure")):
+            with self.assertRaises(review.ReviewError):
+                writer.run("correctness-pass-1", action)
+        writer.save()
+        recorded = json.loads(path.read_text(encoding="utf-8"))["agent_roster"]["agents"]
+        self.assertEqual(recorded["correctness-pass-1"]["status"], "failed")
+        self.assertEqual(recorded["correctness-pass-1"]["configuration_evidence"], "not_started")
+        with self.assertRaises(review.concurrent.futures.CancelledError):
+            writer.run("aggregator", action)
+        action.assert_not_called()
+
+    def test_single_writer_records_live_transitions_and_cancels_unstarted_actions(self):
+        snapshot = {"agent_roster": self.resolve()}
+        path = self.root / "snapshot.json"
+        writer = review.AgentStateWriter(snapshot, path)
+        writer.save()
+        started = threading.Event()
+        release = threading.Event()
+
+        def running_action():
+            started.set()
+            self.assertTrue(release.wait(2))
+            return "finished"
+
+        with review.concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            future = pool.submit(writer.run, "correctness-pass-1", running_action)
+            try:
+                self.assertTrue(started.wait(2))
+                writer.run("security-pass-1", lambda: "completed")
+                live = json.loads(path.read_text(encoding="utf-8"))["agent_roster"]["agents"]
+                self.assertEqual(live["security-pass-1"]["status"], "completed")
+                self.assertEqual(live["correctness-pass-1"]["status"], "running")
+                writer.stop()
+                stopped = json.loads(path.read_text(encoding="utf-8"))["agent_roster"]["agents"]
+                self.assertEqual(stopped["correctness-pass-1"]["status"], "interrupted")
+                self.assertEqual(stopped["security-pass-1"]["status"], "completed")
+                self.assertEqual(stopped["aggregator"]["status"], "cancelled")
+                action = mock.Mock()
+                with self.assertRaises(review.concurrent.futures.CancelledError):
+                    writer.run("aggregator", action)
+                action.assert_not_called()
+            finally:
+                release.set()
+            self.assertEqual(future.result(timeout=2), "finished")
+        final = json.loads(path.read_text(encoding="utf-8"))["agent_roster"]["agents"]
+        self.assertEqual(final["correctness-pass-1"]["status"], "completed")
 
     def test_dry_run_displays_individual_commands_without_invoking(self):
         self.args.dry_run = True
