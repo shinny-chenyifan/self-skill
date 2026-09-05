@@ -4194,6 +4194,106 @@ def _is_current_change_finding(finding: dict[str, Any]) -> bool:
     )
 
 
+def _validate_agent_execution(
+    record: dict, location: str, errors: list[Diagnostic]
+) -> None:
+    execution = record.get("agent_execution")
+    if execution is None and "agent_execution" not in record:
+        if record.get("actual_model") == "mixed" or record.get("actual_reasoning_effort") == "mixed":
+            errors.append(diagnostic("E_REVIEW_AGENT_EXECUTION", f"{location} mixed configuration needs per-agent evidence"))
+        return
+
+    def reject(message: str) -> None:
+        errors.append(diagnostic("E_REVIEW_AGENT_EXECUTION", f"{location}: {message}"))
+
+    if not isinstance(execution, dict):
+        reject("agent_execution must be an object for completed Review")
+        return
+    if type(execution.get("schema_version")) is not int or execution["schema_version"] != 1:
+        reject("agent_execution schema_version must be 1")
+    if not is_resolved_string(execution.get("config_revision")) or not re.fullmatch(
+        r"[0-9a-f]{64}", str(execution.get("config_id", ""))
+    ):
+        reject("agent_execution requires config_revision and config_id")
+    passes = execution.get("passes")
+    agents = execution.get("agents")
+    if type(passes) is not int or passes < 1 or not isinstance(agents, list) or not agents:
+        reject("agent_execution requires positive passes and nonempty agents")
+        return
+    if record.get("mode") == "native":
+        lane_views = {view: [view] for view in REQUIRED_REVIEW_VIEWS}
+        evidence_kind = "native_tool"
+    elif record.get("mode") == "script":
+        lane_views = {
+            "correctness": ["correctness"],
+            "state-concurrency": ["state-lifecycle"],
+            "security": [],
+            "reliability-performance": ["error-boundaries"],
+            "contracts-tests": ["api-integration", "tests-regression"],
+        }
+        evidence_kind = "cli_invocation"
+    else:
+        reject("agent_execution mode must be native or script")
+        return
+    ids = set()
+    coverage = set()
+    models = set()
+    efforts = set()
+    aggregators = 0
+    for agent in agents:
+        if not isinstance(agent, dict):
+            reject("agent entry must be an object")
+            continue
+        identity = agent.get("agent_id")
+        if not is_resolved_string(identity) or identity in ids:
+            reject("agent IDs must be resolved and unique")
+        else:
+            ids.add(identity)
+        for field, values in (("model", models), ("effort", efforts)):
+            value = agent.get(field)
+            if not is_resolved_string(value) or value == "mixed":
+                reject(f"agent {field} must be a concrete invocation value")
+            else:
+                values.add(value)
+        basis = agent.get("selection_basis")
+        if (
+            not isinstance(basis, dict)
+            or set(basis) != {"model", "effort"}
+            or not all(is_resolved_string(value) for value in basis.values())
+        ):
+            reject("agent needs per-field selection_basis")
+        if agent.get("status") != "completed" or agent.get("configuration_evidence") != evidence_kind:
+            reject("agent must have completed with invocation evidence")
+        lane = agent.get("lane")
+        number = agent.get("pass")
+        views = agent.get("views")
+        if agent.get("role") == "reviewer":
+            if (
+                type(number) is not int or not 1 <= number <= passes
+                or not is_str(lane) or lane not in lane_views
+            ):
+                reject("reviewer pass/lane is invalid")
+                continue
+            if not is_str_list(views) or sorted(views) != sorted(lane_views[lane]):
+                reject("reviewer views do not match actual lane coverage")
+            key = (number, lane)
+            if key in coverage:
+                reject("reviewer pass/lane is duplicated")
+            coverage.add(key)
+        elif agent.get("role") == "aggregator":
+            aggregators += 1
+            if type(number) is not int or number != 0 or views != ["aggregation"] or lane != "aggregation":
+                reject("aggregator must use pass=0 and aggregation lane/views")
+        else:
+            reject("Review agent role must be reviewer or aggregator")
+    if len(coverage) != passes * len(lane_views) or aggregators != 1:
+        reject("each pass needs all five views and one final aggregator")
+    for field, values in (("actual_model", models), ("actual_reasoning_effort", efforts)):
+        summary = next(iter(values)) if len(values) == 1 else "mixed"
+        if record.get(field) != summary:
+            reject(f"{field} does not summarize per-agent invocation values")
+
+
 def _validate_review(
     review: Any,
     *,
@@ -4243,6 +4343,7 @@ def _validate_review(
     )
     if record is None:
         return
+    _validate_agent_execution(record, location, errors)
     scope = _validate_review_scope_definition(
         expected_scope,
         f"{location}.expected_scope",
@@ -4441,6 +4542,14 @@ def _validate_review(
                         "E_REVIEW_EVIDENCE_STALE",
                         f"{location} evidence field {field} does not match runtime",
                     )
+                )
+        if "agent_execution" in record or "agent_execution" in payload:
+            if (
+                payload.get("agent_execution") != record.get("agent_execution")
+                or ("agent_execution" in payload) != ("agent_execution" in record)
+            ):
+                errors.append(
+                    diagnostic("E_REVIEW_AGENT_EXECUTION_STALE", f"{location} per-agent evidence does not match runtime")
                 )
         finding_groups = (
             "blockers",

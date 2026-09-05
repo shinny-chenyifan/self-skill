@@ -5,6 +5,18 @@
   "plan_revision": "{{PLAN_REVISION}}",
   "orchestration_revision": "{{ORCHESTRATION_REVISION}}",
   "workflow_status": "planning",
+  "agent_policy": {
+    "schema_version": 1,
+    "revision": "{{AGENT_CONFIG_REVISION}}",
+    "defaults": {},
+    "roles": {},
+    "agents": {}
+  },
+  "agent_roster": {
+    "revision": "{{AGENT_CONFIG_REVISION}}",
+    "displayed_revision": null,
+    "agents": {}
+  },
   "checkpoint": {
     "schema_version": 1,
     "plan_revision": "{{PLAN_REVISION}}",
@@ -61,6 +73,7 @@
       "actual_model": null,
       "actual_reasoning_effort": null,
       "model_selection_basis": null,
+      "agent_execution": null,
       "fail_on": null,
       "scope_id": null,
       "scope_revision": null,

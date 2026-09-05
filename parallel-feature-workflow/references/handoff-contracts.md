@@ -214,6 +214,7 @@ Review Result Handoff 至少包含：
 
 - review engine 和 mode
 - 实际 model、reasoning effort，以及继承或显式覆盖依据
+- 按 [agent-dispatch.md](agent-dispatch.md) 保存逐 Reviewer/汇总者的 `agent_execution`、配置 revision、工具调用证据与状态；异构时顶层 scalar 使用 mixed，不能省略逐 Agent 证据
 - `scope_id`
 - Scope Contract revision
 - `plan_revision`、`orchestration_revision` 和 contract revisions

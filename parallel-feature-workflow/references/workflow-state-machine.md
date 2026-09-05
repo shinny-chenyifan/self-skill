@@ -19,6 +19,7 @@
 
 - `plan_revision`：由 `solution-planner` 或 planner fallback 产生。
 - `orchestration_revision`：任务、依赖、Agent、worktree、所有权和 merge 顺序的版本。
+- Agent 配置 revision：仅模型/强度选择的运行态版本，规则见 [agent-dispatch.md](agent-dispatch.md)；不替代职责/所有权变更的 orchestration revision。
 - `contract_id@revision`：每份共享契约的确切版本。
 - `WORKFLOW_BASE_SHA`：最终集成相对的目标基线。
 - `PLAN_SHA`：包含已确认规划文档的共同祖先。
@@ -100,6 +101,7 @@
 | --- | --- | --- |
 | 目标、范围、架构、公共行为、数据、安全、兼容、核心验收或回滚变化 | 当前方案确认；全部依赖旧语义的编排、契约、任务和 Review | 升级 `plan_revision`，重新执行方案质量与确认，再重建受影响编排 |
 | 任务边界、依赖、Agent/worktree、所有权或 merge 顺序变化 | 当前编排确认、受影响文档、任务实现、测试、handoff、Review 和集成资格 | 升级 `orchestration_revision`，标记受影响任务 `stale`，重新确认并逐项判定证据是否可复用 |
+| 只改变 Agent 模型/强度，不改变职责、所有权或范围 | 不自动失效既有代码/方案；历史 attempt 配置不可改写 | 升级运行态配置 revision，展示变化和可修改提醒，仅影响后续派发；用户要求以新配置重审时重跑受影响视角和汇总 |
 | 方案拥有的契约语义变化（范围、公共行为、数据、安全、兼容、核心验收或回滚） | 当前方案确认；全部依赖旧语义的编排、契约、任务和 Review | 返回 `solution-planner`，升级并重新确认 `plan_revision`，再重建受影响编排与契约 |
 | 已确认方案边界内的任务间契约实质变化 | 当前编排确认、旧 contract revision；已启动或完成的 producer、直接及传递消费者，以及基于其 HEAD/checkpoint 的下游完成、Review 和集成资格 | 升级并重新确认 `orchestration_revision`，生成新 contract revision，列出影响图，将 producer、消费者和依赖下游标记 `stale`，复核、测试、报告和 Review |
 | 契约的纯描述、链接等非语义元数据变化 | 仅被修改的文档版本及其 provenance 校验；不得自动失效实现，也不得借此改变语义 | 记录独立文档 revision 和 `supersedes`；一旦影响行为或义务，按上两行升级 |

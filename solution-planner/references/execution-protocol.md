@@ -10,6 +10,8 @@
 
 ## 执行循环
 
+每次启动或恢复执行先按 [agent-roster.md](agent-roster.md) 展示当前分工、模型/强度和可修改提醒。`agent_policy/agent_roster` 复用本计划的唯一运行态；模型调整仅影响后续派发，不能覆盖历史 attempt，也不等于方案或源码变化。
+
 1. 开始时读取原始目标、已确认方案和当前状态。多事项任务逐项建立 `REQ → AC → STEP/TASK → 实现 → TEST/证据`，与原始清单对照，不能从已完成文件反推应做事项。
 2. 在已知里程碑内按局部上下文工作。步骤状态使用 `NOT_STARTED → IN_PROGRESS → IMPLEMENTED → VALIDATED → VERIFIED`；`BLOCKED` 记录阻塞原因及恢复条件。代码写完只支持 `IMPLEMENTED`，规定验证通过才支持 `VALIDATED`，独立反向验收后才支持 `VERIFIED`。
 3. 里程碑结束、重大决策、阻塞、交接或主动暂停时写检查点。保存 phase、milestone、status、last completed、remaining、blockers、一个具体 next action；验证失败也必须记录。每个 shell 命令或微小修改无需同步。

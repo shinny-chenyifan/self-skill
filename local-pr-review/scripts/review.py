@@ -24,7 +24,14 @@ FINAL_SCHEMA = SCRIPT_DIR / "schemas" / "final-report.json"
 SCOPE_SCHEMA = SCRIPT_DIR / "schemas" / "review-scope.json"
 SEVERITY_RANK = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
 CONFIDENCE_VALUES = {"high", "medium", "low"}
-EFFORT_VALUES = ("minimal", "low", "medium", "high", "xhigh")
+EFFORT_VALUES = ("none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra")
+EFFORT_ALIASES = {
+    "hight": "high",
+    "xhight": "xhigh",
+    "mide": "medium",
+    "mid": "medium",
+    "med": "medium",
+}
 SCOPE_RELATIONS = {
     "in_scope",
     "required_integration",
@@ -156,8 +163,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--effort",
-        choices=EFFORT_VALUES,
-        help="显式覆盖推理强度；默认严格继承调用此 Skill 的 Codex 会话推理强度",
+        help="任务默认推理强度；支持 high/xhigh/medium 等及常见拼写别名",
+    )
+    parser.add_argument(
+        "--agent-config", help="按角色或 Agent ID 分配模型/强度的 JSON 文件"
+    )
+    parser.add_argument(
+        "--capabilities-file",
+        help="当前执行后端已核实的模型/强度能力快照；覆盖配置时使用",
     )
     parser.add_argument(
         "--fail-on",
@@ -239,6 +252,8 @@ def resolve_session_execution() -> Tuple[str, str]:
                         continue
                     candidate = payload.get("model")
                     candidate_effort = payload.get("effort")
+                    model = None
+                    effort = None
                     if (
                         isinstance(candidate, str)
                         and candidate.strip()
@@ -266,6 +281,174 @@ def resolve_execution(
         return model, effort
     session_model, session_effort = resolve_session_execution()
     return model or session_model, effort or session_effort
+
+
+def normalize_effort(value: str) -> str:
+    if not isinstance(value, str):
+        raise ReviewError("推理强度必须是字符串")
+    value = value.strip().lower()
+    value = EFFORT_ALIASES.get(value, value)
+    if value not in EFFORT_VALUES:
+        raise ReviewError("未知推理强度：{}".format(value))
+    return value
+
+
+def execution_profile(value: Any, label: str) -> Dict[str, str]:
+    if not isinstance(value, dict) or set(value) - {"model", "effort"}:
+        raise ReviewError("{} 只能包含 model 和 effort".format(label))
+    profile = {}
+    for key, item in value.items():
+        if not isinstance(item, str) or not item.strip():
+            raise ReviewError("{}.{} 必须是非空字符串".format(label, key))
+        profile[key] = normalize_effort(item) if key == "effort" else item.strip()
+    return profile
+
+
+def load_agent_policy(path: Optional[str]) -> Dict[str, Any]:
+    if not path:
+        return {
+            "schema_version": 1, "revision": "inherited-v1",
+            "defaults": {}, "roles": {}, "agents": {},
+        }
+    policy = load_json_object(Path(path).expanduser().resolve(), "Agent 配置")
+    if set(policy) != {"schema_version", "revision", "defaults", "roles", "agents"}:
+        raise ReviewError("Agent 配置字段必须为 schema_version/revision/defaults/roles/agents")
+    if type(policy["schema_version"]) is not int or policy["schema_version"] != 1:
+        raise ReviewError("Agent 配置 schema_version 必须为 1")
+    if not isinstance(policy["revision"], str) or not policy["revision"].strip():
+        raise ReviewError("Agent 配置 revision 必须非空")
+    policy["defaults"] = execution_profile(policy["defaults"], "defaults")
+    for field in ("roles", "agents"):
+        if not isinstance(policy[field], dict):
+            raise ReviewError("{} 必须是对象".format(field))
+        policy[field] = {
+            key: execution_profile(value, "{}.{}".format(field, key))
+            for key, value in policy[field].items()
+        }
+    return policy
+
+
+def load_model_capabilities(path: Optional[str]) -> Dict[str, Any]:
+    if not path:
+        return {}
+    catalog = load_json_object(Path(path).expanduser().resolve(), "模型能力")
+    if (
+        set(catalog) != {"source", "models"}
+        or not isinstance(catalog["source"], str)
+        or not catalog["source"].strip()
+    ):
+        raise ReviewError("模型能力必须包含非空 source 和 models")
+    if not isinstance(catalog["models"], list) or not catalog["models"]:
+        raise ReviewError("模型能力 models 必须是非空数组")
+    names = set()
+    for item in catalog["models"]:
+        if not isinstance(item, dict) or set(item) != {"id", "aliases", "efforts"}:
+            raise ReviewError("每个模型必须包含 id/aliases/efforts")
+        if not isinstance(item["id"], str) or not item["id"].strip():
+            raise ReviewError("模型 id 必须非空")
+        if not isinstance(item["aliases"], list) or not all(
+            isinstance(alias, str) and alias.strip() for alias in item["aliases"]
+        ):
+            raise ReviewError("模型 aliases 必须是字符串数组")
+        for name in [item["id"]] + item["aliases"]:
+            normalized = name.strip().lower()
+            if normalized in names:
+                raise ReviewError("模型名称或别名不唯一：{}".format(name))
+            names.add(normalized)
+        if not isinstance(item["efforts"], list) or not item["efforts"]:
+            raise ReviewError("模型 efforts 必须是非空数组")
+        item["efforts"] = [normalize_effort(value) for value in item["efforts"]]
+    return catalog
+
+
+def resolve_agent_roster(args: argparse.Namespace) -> Dict[str, Any]:
+    policy = load_agent_policy(getattr(args, "agent_config", None))
+    catalog = load_model_capabilities(getattr(args, "capabilities_file", None))
+    definitions = [
+        ("{}-pass-{}".format(lane, number), "reviewer", focus, 1)
+        for number in range(1, args.passes + 1)
+        for lane, focus in REVIEW_LANES
+    ] + [
+        ("aggregator", "aggregator", "深度验证与 gap search" if args.deep else "快速合并与去重", 2)
+    ]
+    if set(policy["roles"]) - {"reviewer", "aggregator"}:
+        raise ReviewError("Review 角色只支持 reviewer/aggregator")
+    unknown = set(policy["agents"]) - {item[0] for item in definitions}
+    if unknown:
+        raise ReviewError("Agent ID 未出现在本次分工清单：{}".format(", ".join(sorted(unknown))))
+    cli_defaults = execution_profile(
+        {
+            key: value for key, value in {"model": args.model, "effort": args.effort}.items()
+            if value is not None
+        },
+        "CLI defaults",
+    )
+    session = None
+    agents = {}
+    for agent_id, role, task, stage in definitions:
+        profile = {}
+        basis = {}
+        for source, layer in (
+            ("task-default", policy["defaults"]),
+            ("task-cli", cli_defaults),
+            ("role:{}".format(role), policy["roles"].get(role, {})),
+            ("agent:{}".format(agent_id), policy["agents"].get(agent_id, {})),
+        ):
+            profile.update(layer)
+            basis.update({field: source for field in layer})
+        requested = dict(profile)
+        if len(profile) < 2:
+            if session is None:
+                session = resolve_session_execution()
+            for field, value in zip(("model", "effort"), session):
+                if field not in profile:
+                    profile[field] = value
+                    basis[field] = "inherited"
+        if catalog:
+            name = profile["model"].lower()
+            if name == "aster":
+                name = "astra"
+            matches = [
+                item for item in catalog["models"]
+                if name in {alias.strip().lower() for alias in [item["id"]] + item["aliases"]}
+            ]
+            if len(matches) != 1:
+                raise ReviewError("{} 的模型不在当前后端能力中：{}".format(agent_id, profile["model"]))
+            model = matches[0]
+            if profile["effort"] not in model["efforts"]:
+                raise ReviewError("{} 不支持推理强度 {}（{}）".format(model["id"], profile["effort"], agent_id))
+            profile["model"] = model["id"]
+        elif requested:
+            # Explicit overrides require a verified backend catalog, even in dry-run.
+            raise ReviewError("显式模型/强度配置需要 --capabilities-file；不得猜测支持组合")
+        agents[agent_id] = {
+            "agent_id": agent_id, "role": role, "task": task, "stage": stage,
+            "requested": requested, "model": profile["model"], "effort": profile["effort"],
+            "selection_basis": basis, "status": "planned", "configuration_evidence": "not_started",
+        }
+    identity = {
+        "policy": policy, "cli_defaults": cli_defaults, "session": session,
+        "catalog": catalog, "agents": agents,
+    }
+    config_id = hashlib.sha256(
+        json.dumps(identity, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return {
+        "schema_version": 1, "config_revision": policy["revision"],
+        "config_id": config_id, "agents": agents,
+    }
+
+
+def roster_lines(roster: Dict[str, Any], jobs: int) -> List[str]:
+    lines = [
+        "Agent 分工与等级（Review 并发上限 {}，汇总在全部视角完成后执行）：".format(jobs)
+    ]
+    for agent in roster["agents"].values():
+        lines.append(
+            "- {agent_id} [{role}]：{task}；{model} / {effort}；{status}；来源 {selection_basis}".format(**agent)
+        )
+    lines.append("你可以按角色或单个 Agent 修改模型与推理强度；未修改就按上述配置继续。")
+    return lines
 
 
 def run_command(
@@ -987,7 +1170,10 @@ def run_lane(
         effort,
     )
 
-    print("[开始] {}".format(task_id), flush=True)
+    execution = snapshot.get("agent_roster", {}).get("agents", {}).get(task_id)
+    if execution is not None:
+        execution.update(status="running", configuration_evidence="cli_invocation")
+    print("[开始] {}：{} / {}".format(task_id, model, effort), flush=True)
     result = run_command(command, timeout=timeout)
     (log_dir / "{}.stdout.log".format(task_id)).write_text(
         result.stdout, encoding="utf-8"
@@ -1003,11 +1189,14 @@ def run_lane(
     validate_lane_payload(payload, lane_id, snapshot["scope_id"], task_id)
     for index, finding in enumerate(payload["findings"], 1):
         finding["candidate_id"] = "{}:{}".format(task_id, index)
+    if execution is not None:
+        execution["status"] = "completed"
     print("[完成] {}：{} 个候选问题".format(task_id, len(payload["findings"])), flush=True)
     return {
         "task_id": task_id,
         "expected_lane": lane_id,
         "pass": pass_number,
+        "execution": execution,
         "result": payload,
     }
 
@@ -1109,7 +1298,10 @@ def run_verifier(
     verifier_input = json.dumps(verifier_payload, ensure_ascii=False, indent=2)
 
     stage = "深度验证与 gap search" if deep else "快速合并与去重"
-    print("[开始] {}".format(stage), flush=True)
+    execution = snapshot.get("agent_roster", {}).get("agents", {}).get("aggregator")
+    if execution is not None:
+        execution.update(status="running", configuration_evidence="cli_invocation")
+    print("[开始] {}：{} / {}".format(stage, model, effort), flush=True)
     result = run_command(command, stdin=verifier_input, timeout=timeout)
     (log_dir / "verifier.stdout.log").write_text(result.stdout, encoding="utf-8")
     (log_dir / "verifier.stderr.log").write_text(result.stderr, encoding="utf-8")
@@ -1124,6 +1316,8 @@ def run_verifier(
         lane_results=lane_results,
         deep=deep,
     )
+    if execution is not None:
+        execution["status"] = "completed"
     print("[完成] 汇总 {} 个问题".format(len(payload["findings"])), flush=True)
     return payload
 
@@ -1279,8 +1473,8 @@ def build_markdown(result: Dict[str, Any], run_dir: Path) -> str:
         "- 基准提交：`{}`".format(snapshot["base_sha"]),
         "- HEAD：`{}`".format(snapshot["head_sha"]),
         "- merge-base：`{}`".format(snapshot["merge_base"]),
-        "- 模型：`{}`".format(snapshot["model"]),
-        "- 推理强度：`{}`".format(snapshot["effort"]),
+        "- 模型汇总：`{}`（mixed 时以逐 Agent 记录为准）".format(snapshot["model"]),
+        "- 推理强度汇总：`{}`".format(snapshot["effort"]),
         "- 变更文件数：{}".format(len(snapshot["changed_files"])),
         "- 审查任务数：{}".format(result["summary"]["review_tasks"]),
         "",
@@ -1340,6 +1534,14 @@ def build_markdown(result: Dict[str, Any], run_dir: Path) -> str:
             "",
         ]
     )
+
+    if "agent_roster" in snapshot:
+        lines.extend([
+            "## Agent 执行配置", "",
+            "配置证据为传给 CLI 的参数，不声称服务端实际采用了未暴露的配置。", "",
+        ])
+        lines.extend(roster_lines(snapshot["agent_roster"], snapshot["review_jobs"]))
+        lines.append("")
 
     append_findings_section(
         lines,
@@ -1410,31 +1612,33 @@ def make_run_dir(args: argparse.Namespace, snapshot: Dict[str, Any]) -> Path:
     return run_dir
 
 
-def print_dry_run(
-    args: argparse.Namespace, snapshot: Dict[str, Any], model: str, effort: str
-) -> None:
+def print_dry_run(args: argparse.Namespace, snapshot: Dict[str, Any]) -> None:
     repo = Path(snapshot["repo_root"])
     placeholder = Path("<output-dir>")
     print(json.dumps(snapshot, ensure_ascii=False, indent=2))
     print("\n将执行以下类型的命令：")
     for pass_number in range(1, args.passes + 1):
         for lane_id, focus in REVIEW_LANES:
+            execution = snapshot["agent_roster"]["agents"][
+                "{}-pass-{}".format(lane_id, pass_number)
+            ]
             prompt = lane_prompt(lane_id, focus, snapshot, pass_number)
             command = lane_command(
                 repo,
                 placeholder / "raw" / "{}-pass-{}.json".format(lane_id, pass_number),
                 prompt,
-                model,
-                effort,
+                execution["model"],
+                execution["effort"],
             )
             print("- {}".format(shlex.join(command)))
     verifier_workdir = repo if args.deep else placeholder
+    aggregator = snapshot["agent_roster"]["agents"]["aggregator"]
     verify_command = verifier_command(
         verifier_workdir,
         placeholder / "verified-findings.json",
         verifier_prompt(snapshot, args.deep),
-        model,
-        effort,
+        aggregator["model"],
+        aggregator["effort"],
         not args.deep,
     )
     print("- {}  # stdin: 各视角 JSON".format(shlex.join(verify_command)))
@@ -1451,10 +1655,16 @@ def execute(args: argparse.Namespace) -> int:
     scope = load_scope_contract(args.scope_file)
     require_command("codex")
 
-    model, effort = resolve_execution(args.model, args.effort)
+    roster = resolve_agent_roster(args)
+    models = {item["model"] for item in roster["agents"].values()}
+    efforts = {item["effort"] for item in roster["agents"].values()}
+    model = next(iter(models)) if len(models) == 1 else "mixed"
+    effort = next(iter(efforts)) if len(efforts) == 1 else "mixed"
     snapshot = collect_snapshot(args.repo, args.base)
     snapshot["model"] = model
     snapshot["effort"] = effort
+    snapshot["agent_roster"] = roster
+    snapshot["review_jobs"] = min(args.jobs, args.passes * len(REVIEW_LANES))
     snapshot["scope_id"] = scope["scope_id"]
     snapshot["scope_contract"] = scope["contract"]
     snapshot["scope_file"] = str(Path(args.scope_file).expanduser().resolve())
@@ -1463,8 +1673,12 @@ def execute(args: argparse.Namespace) -> int:
             "工作区存在未提交改动。请先处理改动，或明确使用 --allow-dirty（不推荐）"
         )
 
+    if not snapshot["changed_files"]:
+        for agent in roster["agents"].values():
+            agent["status"] = "not_run"
+    print("\n".join(roster_lines(roster, snapshot["review_jobs"])), flush=True)
     if args.dry_run:
-        print_dry_run(args, snapshot, model, effort)
+        print_dry_run(args, snapshot)
         return 0
 
     run_dir = make_run_dir(args, snapshot)
@@ -1529,8 +1743,8 @@ def execute(args: argparse.Namespace) -> int:
                 snapshot,
                 raw_dir,
                 log_dir,
-                model,
-                effort,
+                roster["agents"]["{}-pass-{}".format(task[1], task[0])]["model"],
+                roster["agents"]["{}-pass-{}".format(task[1], task[0])]["effort"],
                 args.timeout,
             ): task
             for task in tasks
@@ -1541,23 +1755,31 @@ def execute(args: argparse.Namespace) -> int:
                 lane_results.append(future.result())
             except Exception as exc:
                 task_id = "{}-pass-{}".format(task[1], task[0])
+                roster["agents"][task_id]["status"] = "failed"
                 failures.append("{}：{}".format(task_id, exc))
 
+    (run_dir / "snapshot.json").write_text(
+        json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     if failures:
         raise ReviewError("部分审查任务失败：\n- {}".format("\n- ".join(failures)))
 
     lane_results.sort(key=lambda item: (item["pass"], item["expected_lane"]))
     ensure_snapshot_unchanged(snapshot, args.allow_dirty)
-    verified = run_verifier(
-        snapshot,
-        lane_results,
-        run_dir,
-        log_dir,
-        model,
-        effort,
-        args.timeout,
-        args.deep,
-    )
+    aggregator = roster["agents"]["aggregator"]
+    print("\n".join(roster_lines({"agents": {"aggregator": aggregator}}, 1)), flush=True)
+    try:
+        verified = run_verifier(
+            snapshot, lane_results, run_dir, log_dir,
+            aggregator["model"], aggregator["effort"], args.timeout, args.deep,
+        )
+    except Exception:
+        aggregator["status"] = "failed"
+        raise
+    finally:
+        (run_dir / "snapshot.json").write_text(
+            json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
     ensure_snapshot_unchanged(snapshot, args.allow_dirty)
 
     findings = verified["findings"]

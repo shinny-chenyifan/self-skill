@@ -68,6 +68,8 @@ Agent 不得自行输出或决定 `blocking`。主任务或脚本仅在 finding 
 
 ## 原生多 Agent 模式
 
+每次启动前完整读取 [agent-configuration.md](references/agent-configuration.md)，展示 Reviewer/汇总者的分工、模型、推理强度及来源，并提醒用户可修改；新增人员或配置变化时再次告知。配置不是范围确认或写入授权。
+
 1. 确认 Review Scope Contract 后，使用只读 Git 命令解析固定的基准提交、HEAD 和 merge-base，并记录初始工作区状态。
 2. 并行启动五个边界明确的审查 Agent，分别负责：
    - 正确性与业务逻辑
@@ -76,12 +78,12 @@ Agent 不得自行输出或决定 `blocking`。主任务或脚本仅在 finding 
    - API、兼容性与集成风险
    - 测试覆盖与回归风险
 3. 每个 Agent 的任务必须包含相同的固定提交范围、完整范围契约、`scope_id`、唯一审查视角、只读约束、双轴分类和 P0-P3 输出要求。使用原生子 Agent 工具，不要使用 App 的新建独立任务工具。
-4. 默认继承调用任务的模型与推理强度，不传模型覆盖；只有用户明确指定时才覆盖。
+4. 按配置参考逐字段解析单 Agent、角色、任务默认和继承值；默认不传覆盖，显式指定时按当前工具能力验证后覆盖，不静默降级。
 5. 等待全部审查 Agent 完成，为每个候选分配稳定且唯一的 `candidate_id`。Agent 失败时报告具体视角；不得用主任务的主观猜测替代失败结果。
 6. 启动一个独立汇总 Agent 并传入范围契约、`scope_id` 和全部候选。快速模式仅验证格式、合并和去重，不读取仓库；每个输入 `candidate_id` 必须且只能出现在一个保留 finding 中，`rejected_candidates` 必须为空，归因冲突时降为 `uncertain`，不得改写为更具阻断性的归因，严重度必须保留来源候选中的最高级别。深度模式允许重新读取固定范围代码验证候选并执行 gap search；每个输入 `candidate_id` 必须且只能出现在一个保留 finding 或一个 rejected candidate 中，新 finding 仍须遵守相同分类和阻断规则，并标记为 `gap-search` 来源。
 7. 主任务根据统一公式派生阻断状态；不得采信 Agent 自行给出的阻断结论。
 8. 汇总完成后重新检查 HEAD 和工作区状态；发生变化时作废结果。
-9. 在最终结果中报告使用原生多 Agent 模式、`scope_id`，以及模型与推理强度为继承值或用户指定值。
+9. 在最终结果中报告使用原生多 Agent 模式、`scope_id`，以及逐 Reviewer/汇总者的模型、推理强度、配置来源和执行证据；异构配置不得概括成一个继承值。
 
 原生模式的子 Agent 是当前审查任务的实现子任务，不要用 `create_thread` 或其他新建用户任务能力替代。
 
@@ -114,12 +116,9 @@ python (Join-Path $codexHome "skills\local-pr-review\scripts\review.py") `
 
 `--scope-file` 始终必需。按照 `scripts/schemas/review-scope.json` 将已确认契约写入系统临时目录，不要写入目标仓库；契约必须为 `status="confirmed"` 且 `open_questions` 为空。缺失、未确认、Schema 不合法或 `scope_id` 不一致时返回退出码 `2`，且不得启动子 Codex。只检查快照和命令时添加 `--dry-run`，不得把 dry-run 描述为真实 Review。
 
-## 模型与推理强度一致性
+## 模型与推理强度配置
 
-- 默认不要传 `--model` 或 `--effort`。脚本必须从 `CODEX_THREAD_ID` 对应的调用会话记录中解析最新模型和推理强度，并将两者显式传给每个审查任务和汇总任务。
-- 任一项解析失败时必须停止，不得回退到全局配置、其他模型或默认推理强度。
-- 只有用户明确指定时才传 `--model <模型标识>` 或 `--effort <minimal|low|medium|high|xhigh>`；显式参数覆盖对应的调用会话配置。
-- 在最终结果中报告实际传给子任务的模型标识和推理强度。
+脚本回退也必须读取 [agent-configuration.md](references/agent-configuration.md)，在执行前展示清单和可修改提醒。默认仍严格继承；`--model/--effort` 设置任务默认，`--agent-config` 支持逐角色和单 Agent 分配，显式覆盖通过 `--capabilities-file` 核实当前 CLI 支持的组合。未指定字段解析失败时停止，不借其他配置继续。保留逐 Agent 参数与状态，报告配置证据的可见性限制。
 
 ## 安全和输出
 

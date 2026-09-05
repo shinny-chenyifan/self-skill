@@ -24,6 +24,7 @@ description: 为跨模块、多子任务或大型重构编排从已确认方案�
 3. 计划或执行任何 Git/worktree 动作前读取 [git-worktree-lifecycle.md](references/git-worktree-lifecycle.md)。
 4. 仅在专职 Skill 缺失、无法加载，或用户明确禁用并选择 fallback 时读取 [fallback-protocols.md](references/fallback-protocols.md)。
 5. 跨会话恢复和生成最终 PR 交付前，完整读取 [delivery-and-recovery.md](references/delivery-and-recovery.md)。
+6. 形成 Agent 清单、派发、配置调整或恢复前读取 [agent-dispatch.md](references/agent-dispatch.md)；展示模型/强度、来源及可修改提醒，运行记录仍由外部账本独占。
 
 生成 `.ai/` 文档时复制并填写 `assets/templates/` 中的模板，不要重新发明结构。生成后使用 `scripts/validate_workflow.py` 校验；manifest 中的 AC catalog 是机器权威，任务、三类计划测试和 Review Scope 都必须保留可验证的 AC 覆盖关系。
 
@@ -120,7 +121,7 @@ description: 为跨模块、多子任务或大型重构编排从已确认方案�
 - 共享契约的确切 revision、生产者、消费者和变更策略
 - 文件所有权矩阵，共享路径默认单写者
 - 冻结到 manifest 的 task/integration `allowed_paths` 和唯一 `merge_order`
-- Agent 角色、并发预算和上下文加载范围
+- Agent 稳定 ID、职责、并发批次/预算、上下文范围和逐 Agent 模型/强度及配置来源
 - worktree、branch、目标分支、基线和集成顺序
 - 每个分支及最终集成分支的 `local-pr-review` 调用计划
 - 失败、重规划、恢复和清理策略
@@ -132,6 +133,8 @@ description: 为跨模块、多子任务或大型重构编排从已确认方案�
 ### 4. 请求编排确认
 
 展示确切的 `plan_revision`、`orchestration_revision`、契约 revision、任务图、文件所有权、Agent/worktree 和 merge 顺序，请用户确认或修改。
+
+同时展示每个 Agent 的模型与推理强度，并明确用户可以按角色或单个 Agent 修改；不修改就采用展示配置，不额外要求逐 Agent 确认。任务启动、执行启动、恢复及新增 Agent/配置变化时仍须告知，不能只在最终报告补列。
 
 确认只批准该编排版本，不自动授权：
 
@@ -194,6 +197,8 @@ python "<skill-dir>\scripts\validate_workflow.py" `
 - 依赖的确切 contract revisions
 - 相关源码、测试和构建入口
 
+派发前按 Agent 配置参考解析并展示有效配置，尊重用户显式分配；默认继承，只有简单低风险独立任务可透明降级。将实际工具 ID、调用配置、配置 revision 和结果追加到外部账本，不声称已切换当前主 Agent 或运行中的子 Agent。
+
 不得默认读取其他任务或整份原始需求。若压缩文档与已确认方案冲突，以确切 `plan_revision` 为准并暂停上报。
 
 启动每个实现 Agent 前，按项目规则取得绑定 `task_id`、`orchestration_revision` 和允许路径的源码写入授权，并记录 `implementation_write_authorization_basis`。Fix 超出原允许路径、契约或范围时必须停止并重新授权；Integrator 的冲突解决或手工代码修改也需要绑定文件和 Integration SHA 的写入授权。
@@ -219,6 +224,8 @@ Task Scope 的 `acceptance_criteria` 必须精确等于该 task 在 manifest 中
 只有最终集成 Review 使用工作流目标基线 `WORKFLOW_BASE_SHA`。下游任务从已审查上游 HEAD 派生时，不得把全局基线误作该任务 Review base。
 
 Review Result 必须证明五类视角全部完成、汇总模式、实际引擎/模型/推理强度和固定快照。编排器按 `scope_relation + change_relation + fail_on` 独立重算 blockers；既有未恶化、范围外或归因不确定项进入告知，不得仅因严重度阻断，也不得把本次可归因的高优先级 finding 填入非阻断数组绕过。
+
+按 Agent 配置参考传递逐 Reviewer/汇总者配置并接收 `agent_execution` 扩展；异构执行不能再用一个全局模型/强度代替逐 Agent 证据。Scope Contract 与 fail_on 不因配置变化而改变。
 
 Review 阻断时进入 `Fix → 重新取得 staging/commit 授权 → 新 commit → 新 HEAD → Re-review`。Scope Contract 未变化时保留同一 `scope_id`，但旧 HEAD 的 Review 结果失效。`PLAN_SHA` 形成后 Scope Contract 默认不可变；内容或 `fail_on` 变化都属于编排变更，必须升级并重新确认 `orchestration_revision`、生成新的 manifest 和 `PLAN_SHA`，追加带 old/new revision、old/new PLAN_SHA、原因及失效 task 集合的 `rebaseline` 事件；不得改写旧历史。实现者不能自行把 finding 标记为已验证关闭。Review 不完整、视角失败、scope_id 不一致或快照变化时，任务状态为 `review_incomplete`，不得进入集成。
 
