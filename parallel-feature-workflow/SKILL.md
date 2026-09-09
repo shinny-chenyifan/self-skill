@@ -23,7 +23,7 @@ description: 为跨模块、多子任务或大型重构编排从已确认方案�
 2. 生成任务、契约和 Agent 交接前读取 [handoff-contracts.md](references/handoff-contracts.md)。
 3. 计划或执行任何 Git/worktree 动作前读取 [git-worktree-lifecycle.md](references/git-worktree-lifecycle.md)。
 4. 仅在专职 Skill 缺失、无法加载，或用户明确禁用并选择 fallback 时读取 [fallback-protocols.md](references/fallback-protocols.md)。
-5. 跨会话恢复和生成最终 PR 交付前，完整读取 [delivery-and-recovery.md](references/delivery-and-recovery.md)。
+5. 初始化持久资料、发生上下文压缩或跨会话恢复、生成最终 PR 交付前，完整读取 [delivery-and-recovery.md](references/delivery-and-recovery.md)；执行中按其规则保存重要结论和阶段检查点，日常按需读取相关章节。
 6. 形成 Agent 清单、派发、配置调整或恢复前读取 [agent-dispatch.md](references/agent-dispatch.md)；展示模型/强度、来源及可修改提醒，运行记录仍由外部账本独占。
 
 生成 `.ai/` 文档时复制并填写 `assets/templates/` 中的模板，不要重新发明结构。生成后使用 `scripts/validate_workflow.py` 校验；manifest 中的 AC catalog 是机器权威，任务、三类计划测试和 Review Scope 都必须保留可验证的 AC 覆盖关系。
