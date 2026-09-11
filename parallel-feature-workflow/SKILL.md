@@ -81,7 +81,7 @@ description: 为跨模块、多子任务或大型重构编排从已确认方案�
 2. 已有方案但缺少可核验状态或证据时，使用其“已有方案审查”流程；需要实质修订时形成新的可识别版本。
 3. 已有同一确切版本的有效结果时复用，不重复生成或重复确认。
 
-状态标签是必要条件，不是充分证据。复用前必须取得 [handoff-contracts.md](references/handoff-contracts.md) 规定的完整 Planning Handoff，并核对其来源、仓库证据和 revision。用户或文档仅声称“已确认”“通过”，却缺少范围、保持不变项、验收来源、实施步骤、验证、风险或回滚时，不得据此进入编排；使用 `solution-planner` 补充审查，或保持 `plan_blocked` 并请求缺失材料。
+轻量方案接入前须由 `solution-planner` 补齐完整模式的契约、质量评估及确切版本确认；不能仅补写状态字段后交接。状态标签是必要条件，不是充分证据。复用前必须取得 [handoff-contracts.md](references/handoff-contracts.md) 规定的完整 Planning Handoff，并核对其来源、仓库证据和 revision。用户或文档仅声称“已确认”“通过”，却缺少范围、保持不变项、验收来源、实施步骤、验证、风险或回滚时，不得据此进入编排；使用 `solution-planner` 补充审查，或保持 `plan_blocked` 并请求缺失材料。
 
 `solution-planner` 的“新方案制定”直接提供 `decision_status/confirmation_basis`。“已有方案审查”提供 `source_decision_status/source_confirmation_basis`；只把可核验的来源状态归一化为只读的 `effective_decision_status/effective_confirmation_basis`。审查建议本身没有确认状态；需要形成修订方案时先按其规则产生并确认新的 `plan_revision`。
 
@@ -134,7 +134,7 @@ description: 为跨模块、多子任务或大型重构编排从已确认方案�
 
 展示确切的 `plan_revision`、`orchestration_revision`、契约 revision、任务图、文件所有权、Agent/worktree 和 merge 顺序，请用户确认或修改。
 
-同时展示每个 Agent 的模型与推理强度，并明确用户可以按角色或单个 Agent 修改；不修改就采用展示配置，不额外要求逐 Agent 确认。任务启动、执行启动、恢复及新增 Agent/配置变化时仍须告知，不能只在最终报告补列。
+同时展示每个 Agent 的模型与推理强度，并明确用户可以按角色或单个 Agent 修改；不修改就采用展示配置，不额外要求逐 Agent 确认。实际派发、新增 Agent 或配置变化前告知；相同配置已展示时不因阶段切换重复播报，恢复时核对实际状态，不能只在最终报告补列。
 
 确认只批准该编排版本，不自动授权：
 
@@ -197,7 +197,7 @@ python "<skill-dir>\scripts\validate_workflow.py" `
 - 依赖的确切 contract revisions
 - 相关源码、测试和构建入口
 
-派发前按 Agent 配置参考解析并展示有效配置，尊重用户显式分配；实现与修复 Agent 默认显式使用 `gpt-5.6-terra / high`，其他角色按配置参考解析，不静默降级。将实际工具 ID、调用配置、配置 revision 和结果追加到外部账本，不声称已切换当前主 Agent 或运行中的子 Agent。
+派发前按 Agent 配置参考解析并展示有效配置，尊重用户显式分配；所有角色默认继承当前模型与推理强度，固定偏好通过既有 agent_policy 指定并按当前后端能力核验，不静默替换显式配置。将实际工具 ID、调用配置、配置 revision 和结果追加到外部账本，不声称已切换当前主 Agent 或运行中的子 Agent。
 
 不得默认读取其他任务或整份原始需求。若压缩文档与已确认方案冲突，以确切 `plan_revision` 为准并暂停上报。
 
