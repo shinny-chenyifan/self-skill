@@ -28,9 +28,15 @@
 - verification: {{TEST_IDS}}
 - risks: {{RISK_IDS}}
 
+## Implementation Targets and Behavior
+
+For each referenced STEP, specify the file path and class/function/test, configuration key or document section; mark planned additions explicitly. Preserve the approved purpose, before/after behavior, forbidden scope and verification references. Identify existing cases being changed or reused, or describe new scenarios. Do not redesign approved semantics or prescribe line-by-line code.
+
 ## Dependencies
 
 {{DEPENDENCIES_WITH_UNBLOCKS_ON}}
+
+Identify each provider, artifact, contract revision and unblock condition; write none when there is no dependency.
 
 ## Contracts
 

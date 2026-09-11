@@ -197,7 +197,7 @@ python "<skill-dir>\scripts\validate_workflow.py" `
 - 依赖的确切 contract revisions
 - 相关源码、测试和构建入口
 
-派发前按 Agent 配置参考解析并展示有效配置，尊重用户显式分配；默认继承，只有简单低风险独立任务可透明降级。将实际工具 ID、调用配置、配置 revision 和结果追加到外部账本，不声称已切换当前主 Agent 或运行中的子 Agent。
+派发前按 Agent 配置参考解析并展示有效配置，尊重用户显式分配；实现与修复 Agent 默认显式使用 `gpt-5.6-terra / high`，其他角色按配置参考解析，不静默降级。将实际工具 ID、调用配置、配置 revision 和结果追加到外部账本，不声称已切换当前主 Agent 或运行中的子 Agent。
 
 不得默认读取其他任务或整份原始需求。若压缩文档与已确认方案冲突，以确切 `plan_revision` 为准并暂停上报。
 
