@@ -30,7 +30,13 @@
 
 ## Implementation Targets and Behavior
 
-For each referenced STEP, specify the file path and class/function/test, configuration key or document section; mark planned additions explicitly. Preserve the approved purpose, before/after behavior, forbidden scope and verification references. Identify existing cases being changed or reused, or describe new scenarios. Do not redesign approved semantics or prescribe line-by-line code.
+For each referenced STEP, specify the file path and class/function/test, configuration key or document section; mark planned additions explicitly. Preserve the approved purpose, before/after behavior, forbidden scope and verification references. Identify existing cases being changed or reused, or describe new scenarios. Also specify callers/callees, inputs/outputs and side effects, normal/error/boundary behavior, state transitions, verifiable assumptions, permitted local implementation freedom and semantics that the Coder must not change.
+
+## Approved Execution Contract
+
+This task's exact `based_on_plan_revision` is the Coder's primary implementation input. Before changing code, verify every referenced STEP's assumptions, interfaces, call paths and test entry points against the repository. The Coder may choose only behavior-preserving local details such as variable names or private helper extraction. The Coder must not redesign architecture, change public behavior or error semantics, expand scope, invent requirements or silently alter the plan.
+
+If any assumption conflicts with repository reality, stop the affected STEP before implementing a workaround. Report the discrepancy, evidence location, affected AC/STEP/TEST IDs, implementation state and the smallest suggested plan revision. Do not resume that STEP until the revised plan and any affected orchestration are approved.
 
 ## Dependencies
 
@@ -61,4 +67,5 @@ Update the report skeleton linked above; do not locate the Skill installation di
 - A required contract is incomplete or wrong.
 - Scope, public behavior or a shared-file rule must change.
 - A dependency or required fixture is unavailable.
+- A plan assumption, interface, call path or test entry point differs from the approved implementation specification.
 - Completing the task would require an unapproved file or Git action.

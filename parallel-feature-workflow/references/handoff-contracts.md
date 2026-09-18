@@ -30,6 +30,8 @@
 - `DEC-*`、`STEP-*`、`TEST-*`、`RISK-*`
 - 影响范围、发布、回滚或前滚策略
 - `有条件通过` 的待处理项、owner、时点和关闭条件
+- 已批准实施规格：每个 `STEP-*` 的文件和结构位置、调用关系、输入/输出、副作用、正常/异常/边界行为、状态变化、可核验前提、禁止范围、局部自由度、验证和回退
+- Plan Review 对实施规格可直接执行、无需 Coder 重设计的结论与证据
 
 每个条件使用稳定 ID，并记录 `must_close_before=dispatch|branch_review|integration`、非空且去重的 `applies_to`、`required_proof_kinds`、与种类精确一致的 `proof_requirements` 和关闭证据。关闭结果本身使用 `{path,sha256}` 引用；其 `closure.proofs[*].reference` 也必须是可读取并复算摘要的外部 evidence ref，不接受 `"done"` 一类自由文本。
 
@@ -70,6 +72,8 @@
 不要只校验状态字段。Planning Handoff 还必须能定位目标仓库中的相关源码、测试、构建入口和依赖证据；状态由用户手工写成“通过/已确认”不能替代缺失的内容与证据。内容不完整时保持 `plan_blocked`。
 
 若后续任务拆分需要决定方案中没有的公共数据格式、版本、兼容、错误、迁移、线程或生命周期语义，把它视为方案缺口并返回 `solution-planner`；不要在 Orchestration Handoff 中自行补全。
+
+实施规格中的局部自由度只可涵盖不改变批准语义的代码写法。Coder 在实施前必须核验规格前提；任何不一致均按差异处理：停止受影响 `STEP-*`，保存事实证据及受影响 `AC/STEP/TEST`，提出最小修订建议并返回 `solution-planner`。未形成并确认新的 `plan_revision` 前，不得以替代实现继续。
 
 ## Orchestration Handoff
 
@@ -155,6 +159,7 @@
 - deliverables 和可观察完成标准
 - build/test 命令、前置条件和预期结果
 - 失败与契约变更上报规则
+- 实施规格前提核验结果，以及计划偏差的停止和重新规划规则
 - branch/worktree
 - task report path
 
@@ -183,6 +188,8 @@
 
 已知风险使用结构化 task risk ledger。`open` 风险阻断；`closed` 必须引用摘要绑定的关闭证据；`accepted` 不允许 P0，并记录 reason、impact、authorization basis/actor、review condition 和 follow-up owner。task report 的 `risk_ids` 与 ledger 精确一致，Review Result 必须继续携带所有 accepted risk，不能通过写 `None` 隐藏。
 
+Task Handoff 还必须包含计划一致性记录：每个已实现 `STEP-*` 映射的实际文件/结构与 `TEST-*`，以及所有前提核验结果。任何未经批准的范围、语义或步骤偏差必须显式为 `open`，并阻断正式 Review；不得用“实现更优”或测试通过掩盖偏差。
+
 提交内报告不得记录无法预知的自身 `TASK_HEAD_SHA`、最终 commit list 或提交后的 clean 结论；这些由外部运行态绑定。报告必须在待审固定提交中可读取。Integrator 在尚未 merge 任务分支时，使用等价于以下只读方式读取：
 
 ```bash
@@ -205,6 +212,8 @@ git show <TASK_HEAD_SHA>:.ai/reports/<task-id>-summary.md
 - `acceptance_criteria`：精确列出对应的 `AC-*` ID；语义来自当前 plan AC catalog，必要上下文放入 objective/in_scope。
 - `integration_constraints`：保持不变项、契约、兼容和共享文件约束。
 - `open_questions`：正式 Review 前必须为空。
+
+严格方案执行模式下，`integration_constraints` 必须包含 `AC → STEP → 实际改动 → TEST` 的反向核验要求。Reviewer 将未实现的批准步骤标为 `unmet_plan_requirement`，将未经批准的改动标为 `scope_drift`；两者按固定阻断公式处理。
 
 同时交接固定 `base_sha`、`merge_base_sha` 和 `head_sha`。Scope Contract 与提交快照是两个独立身份；任一变化都使 Review 结果失效。
 

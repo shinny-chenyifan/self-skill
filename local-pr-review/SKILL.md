@@ -27,6 +27,8 @@ description: 对本地 Git 仓库的 PR 分支按已确认的 plan 或 issue 范
 
 范围契约定义审查义务，不是隐藏差异的路径过滤器。读取全部固定交付差异检查计划外变更，并从 AC 反查应实现却未出现在 diff 中的事项。`.ai` 可从固定开发 PLAN_SHA 或摘要绑定的外部资料读取作为范围依据，不要求它出现在 PR。最终 PR 的每个新增提交都不能携带 `.ai`；发现污染应报告并停止宣称交付就绪，不能只排除该目录。整理交付提交后，在实际交付 base/head 上重新 Review；旧开发 SHA 的结果不能复用为最终结论。
 
+当 Scope Contract 来自严格方案执行流程时，`integration_constraints` 必须包含已批准实施规格的反向追踪要求。Reviewer 逐项核验 `AC → STEP → 实际改动 → TEST`：批准步骤未实现记为 `unmet_plan_requirement`，未经批准的范围或语义改动记为 `scope_drift`。测试通过不能替代该核验；finding 仍按既有双轴归因和固定阈值公式判定是否阻断。
+
 ## 问题边界和归因
 
 每个 finding 必须保留真实严重度，并给出范围证据和归因证据，同时使用以下两轴分类：

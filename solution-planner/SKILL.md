@@ -50,6 +50,10 @@ description: 为明确要求的方案制定或审查、高风险或复杂契约�
 
 完整模式保留三轴状态、需求与验收追踪、失败反演、按风险的独立 Plan Review、版本确认、验证与回滚。详细规定集中在 [full-plan.md](references/full-plan.md)、[plan-template.md](references/plan-template.md) 和 [quality-gates.md](references/quality-gates.md)，仅按完整流程读取。
 
+完整方案在 `quality_status=通过|有条件通过` 且 `decision_status=已确认` 后，才可作为 **已批准实施规格（Approved Implementation Plan）** 交给 Coder。它不是高层建议，而是 Coder 的主要输入；必须逐个 `STEP-*` 提供可核验的文件、结构位置、调用关系、输入/输出、前后行为、错误与边界语义、状态变化、禁止范围、验证和回退。缺少会改变语义的细节时，不得把选择留给 Coder，必须在规划或 Plan Review 阶段补齐。
+
+Coder 只可在不改变已批准语义的前提下决定局部实现写法，例如变量命名、私有函数拆分和等价控制流。Coder 不得重设计架构、改变公共接口或错误语义、扩大范围、补造需求，或因实现不便静默改计划。实现前必须核验计划所依赖的代码事实、接口和测试入口；发现任一前提不成立，立即停止受影响步骤，报告差异、证据、影响的 `STEP/AC/TEST` 和最小修订建议，返回规划阶段。未经修订、重新审查并确认的 `plan_revision` 不得继续受影响实现。
+
 `parallel-feature-workflow` 负责多 Agent/worktree 实施编排，消费完整 Planning Handoff。轻量方案接入正式编排前，必须补齐完整契约、质量评估和确切版本确认；不能仅添加“通过”状态后交接。方案版本及确认由本 Skill 负责，编排运行态由编排器独占，不维护第二份进度。
 
 `local-pr-review` 负责正式、多视角、固定范围的独立代码审查。普通小改不自动启动五视角 Review；正式并行流程仍遵守其既有 Review 契约、证据与阻塞规则。

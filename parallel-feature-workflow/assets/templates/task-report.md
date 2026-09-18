@@ -28,6 +28,12 @@ commit list and clean-worktree evidence; this file must not refer to its own com
 
 {{CONTRACT_IDS_AND_REVISIONS}}
 
+## Plan Assumption Verification and Conformance
+
+{{STEP_ASSUMPTION_CHECKS_AC_TO_STEP_TO_CHANGE_TO_TEST_MAPPING_AND_APPROVED_DEVIATIONS_OR_NONE}}
+
+Record every referenced STEP's verified assumptions before implementation, then map `AC → STEP → actual change → TEST`. Any unapproved discrepancy remains open and blocks formal Review; do not describe a workaround or a test pass as plan conformance.
+
 ## Verification
 
 {{COMMAND_RESULTS_EXPECTATIONS_AND_EVIDENCE}}

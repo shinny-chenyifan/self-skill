@@ -15,6 +15,8 @@ description: 为跨模块、多子任务或大型重构编排从已确认方案�
 - 本 Skill 负责任务图、共享契约、文件所有权、Agent/worktree、交接、修复和集成调度。
 - `local-pr-review` 负责固定差异、范围契约、多视角 Review、归因、去重和阻断判定。
 
+当采用严格方案执行模式时，已确认的 `plan_revision` 同时是 Coder 的已批准实施规格：编排器只能把其中的 `STEP-*` 分配到 Task Contract，不得补充或重新设计未决定的语义。Coder 在改动前核验计划前提；前提、接口、调用关系或测试入口与仓库事实不一致时，停止受影响任务并返回 Planner，不得以扩大范围、重构或静默改计划继续实现。
+
 ## 资源读取
 
 执行完整工作流时，按阶段完整读取以下文件：
@@ -201,6 +203,8 @@ python "<skill-dir>\scripts\validate_workflow.py" `
 
 不得默认读取其他任务或整份原始需求。若压缩文档与已确认方案冲突，以确切 `plan_revision` 为准并暂停上报。
 
+Task Contract 必须提供每个 `STEP-*` 的文件和结构位置、调用关系、输入/输出、前后行为、错误与边界语义、状态变化、禁止范围和验证。派发时明确：Coder 可以决定不改变语义的局部写法，但不得重设计架构、改变公共行为或错误语义、扩张范围或补造需求。开始修改前，Coder 必须报告计划前提的核验结果；发现差异时停止受影响步骤，记录证据、影响的 `AC/STEP/TEST` 和最小修订建议，保持任务未就绪直至形成并确认新的计划或编排 revision。
+
 启动每个实现 Agent 前，按项目规则取得绑定 `task_id`、`orchestration_revision` 和允许路径的源码写入授权，并记录 `implementation_write_authorization_basis`。Fix 超出原允许路径、契约或范围时必须停止并重新授权；Integrator 的冲突解决或手工代码修改也需要绑定文件和 Integration SHA 的写入授权。
 
 实现完成后，在取得相应 Git 授权的前提下形成固定 `TASK_HEAD_SHA`。首次提交以及每次 Fix 的 staging/commit 都必须重新记录绑定当前 task、`orchestration_revision`、worktree、差异路径和具体 commit 的 `commit_authorizations`；授权路径必须是不可变 manifest 中 `allowed_paths` 的子集，不得把旧 HEAD 的授权扩展到新差异。提交内的任务报告不记录自身最终 SHA，外部运行态把报告路径与 `TASK_HEAD_SHA`、commit list 和 clean 证据绑定。每个 `required_tests` 必须在外部 test result 中以确切 `test_id/command/exit_code/status/result` 留证并绑定 `TASK_HEAD_SHA`；task report 仅提到测试 ID 不能代替执行证据。未提交、工作区不干净、存在未处置风险/TODO/范围偏移，或报告与 HEAD 不一致的任务不能进入正式 Review。
@@ -216,6 +220,8 @@ python "<skill-dir>\scripts\validate_workflow.py" `
 - 对应 `AC-*`
 - `in_scope`、`out_of_scope`、保持不变项和集成约束
 - `TASK_START_SHA/REVIEW_BASE_SHA`、`merge_base_sha`、`TASK_HEAD_SHA`
+
+严格方案执行模式下，Review Scope Contract 还必须包含 `AC → STEP → 实际改动 → TEST` 的反向核验义务。实现遗漏已批准步骤、未经批准的范围或语义偏差，均按本次变更责任处理；不得仅因代码通过测试而放行。
 
 确认后的完整 Scope Contract、其人类可读 revision、`fail_on` 阈值和按 `local-pr-review` 规范化算法计算的 `scope_id` 必须冻结在不可变 manifest；Scope sources 至少包含当前 `plan_revision`。Review 时原样传递 contract，不从 diff 重新推导，也不接受运行态自报的另一份范围。编排器传入的固定 `base_sha` 和冻结的阈值是显式、已确认的 Review 输入，调用 `local-pr-review` 时必须优先使用并跳过 PR/默认分支自动探测；脚本模式传 `--base <fixed-base-sha> --fail-on <frozen-threshold>`。
 
