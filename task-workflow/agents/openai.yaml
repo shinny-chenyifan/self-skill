@@ -1,0 +1,6 @@
+interface:
+  display_name: "任务协作 Workflow"
+  short_description: "为复杂任务协调阶段会话、授权、交接、审查路由与恢复"
+  default_prompt: "使用 $task-workflow 协调当前任务；先判断并确认执行结构、交互方式与所需阶段。"
+policy:
+  allow_implicit_invocation: true

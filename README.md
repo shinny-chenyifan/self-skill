@@ -1,10 +1,10 @@
 # self-skill
 
-可组合的 Codex Skills：日常实现与调试由当前开发 Agent 按项目规范完成；`solution-planner` 负责方案内容、质量和版本确认，`parallel-feature-workflow` 的显式 `workflow-code-session` 模式负责 code 阶段的任务拆分、文件所有权、实现、验证和本地提交，`local-pr-review` 负责固定范围的五视角独立审查。外层 workflow 主控负责 session／阶段切换、执行结构、交互方式、整体状态、Review 路由与修复决定。`parallel-feature-workflow` 的原独立完整流程继续负责 worktree、Review／修复与集成交付，既有门禁不变。
+可组合的 Codex Skills：日常实现与调试由当前开发 Agent 按项目规范完成；`solution-planner` 负责方案内容、质量和版本确认，`parallel-feature-workflow` 的显式 `workflow-code-session` 模式负责 code 阶段的任务拆分、文件所有权、实现、验证和本地提交，`local-pr-review` 负责固定范围的五视角独立审查。[`task-workflow`](task-workflow/SKILL.md) 负责 session／阶段切换、执行结构、交互方式、整体状态、Review 路由与修复决定。`parallel-feature-workflow` 的原独立完整流程继续负责 worktree、Review／修复与集成交付，既有门禁不变。
 
 执行结构分为简略模式（当前 session 规划并协调子 Agent 实施）和多 session 模式；交互方式分为自动与非自动，两组选择相互独立。用户明确指定结构时直接采用；未指定时主控先给出推荐结构、原因和影响范围并等待确认。简略模式需要 Review 时由用户选择 `local-pr-review` 或 Codex 原生单次 Review；后者由外层 workflow 调用实际能力，不进入或模拟五视角流程。
 
-自动模式只在真实用户预授权覆盖当前任务、范围和交互方式，且主控批准当前确切 plan／scope 时继续；非自动模式仍等待用户确认当前确切版本。代码按已确认计划拆分中文本地 commit；默认不 push、不修改远端，方案或审查通过不扩大 Git 与远端操作授权。本仓库仅说明这三个 Skill 的协作边界，未实现 task-workflow，也未据此声明真实 session 试运行已经完成。
+自动模式只在真实用户预授权覆盖当前任务、范围和交互方式，且主控批准当前确切 plan／scope 时继续；非自动模式仍等待用户确认当前确切版本。代码按已确认计划拆分中文本地 commit；默认不 push、不修改远端，方案或审查通过不扩大 Git 与远端操作授权。`task-workflow` 的 W2 能力证据与限制见 [`workflow-v1.md`](docs/validation/workflow-v1.md)；W4 真实试运行尚待用户确认，不能据此称 workflow v1 已可用。
 
 ## 项目接入
 
