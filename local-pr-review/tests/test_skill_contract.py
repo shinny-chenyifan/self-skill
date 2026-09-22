@@ -60,6 +60,30 @@ class SkillContractTests(unittest.TestCase):
             re.compile(r"--scope-file.{0,120}(必需|必须|不可省略)", re.DOTALL),
         )
 
+    def test_workflow_handoff_requires_real_confirmation_and_fixed_snapshot(self):
+        self.assertRegex(
+            self.skill_text,
+            re.compile(r"真实用户预授权.{0,160}确切 plan/scope", re.DOTALL),
+        )
+        self.assertRegex(
+            self.skill_text,
+            re.compile(r"显式传入已解析的 `--base`.{0,120}交接 HEAD", re.DOTALL),
+        )
+
+    def test_workflow_result_and_new_head_have_separate_rules(self):
+        self.assertIn("执行是否完整", self.skill_text)
+        self.assertIn("有无阻断问题", self.skill_text)
+        self.assertRegex(
+            self.skill_text,
+            re.compile(r"新 HEAD 后，旧结论失效.{0,80}重新审查", re.DOTALL),
+        )
+
+    def test_native_single_review_is_routed_outside_this_skill(self):
+        self.assertRegex(
+            self.skill_text,
+            re.compile(r"原生单次 Review.{0,100}不进入本 Skill", re.DOTALL),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
