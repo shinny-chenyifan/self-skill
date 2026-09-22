@@ -15,23 +15,23 @@
 
 ## 解析与默认策略
 
-- 模型和强度分别解析，优先级为：用户单个 Agent > 用户角色 > 用户任务默认 > 继承当前。只指定模型时，强度仍按此链路继承并检查兼容，不偷偷换成模型默认强度。
+- 模型和强度分别解析，优先级为：用户单个 Agent > 用户角色 > 用户任务默认 > workflow 主控的显式阶段或角色配置 > 既有默认或 `strict-plan-execution` 预设 > 继承当前。只指定模型时，强度仍按此链路继承并检查兼容，不偷偷换成模型默认强度。
 - 支持用户自然语言分配；将 `aster` 归一到 `astra`，`hight/xhight/mide/mid/med` 分别归一到 `high/xhigh/medium`。`astra/sol/luna` 及其他简称只能映射到当前派发后端能力中唯一且可用的精确模型 ID；多版本歧义、未知模型或不支持的组合先澄清，不能静默替换。不要固化随产品升级变化的模型清单。
 - 核对的是当前原生派发工具或当前 CLI 的能力，不把 API、App 独立任务与子 Agent 的支持范围混为一谈。原生工具可直接继承但没有暴露具体值时写“继承当前（确切值未暴露）”；不得编造模型和等级。需要显式覆盖而无法验证能力时暂停该派发。
-- Planner、实现、修复与 Plan Reviewer 默认均继承当前模型和推理强度，不内置角色型号或固定强度。用户固定偏好写入既有 `agent_policy` 的任务、角色或单 Agent 配置，不新增配置系统；代码 Reviewer/汇总者沿用其 Review Skill 的同一继承与覆盖规则。
+- workflow 主控传入显式配置时，按上述优先级解析并逐项保留来源；没有 workflow 配置时，Planner、实现、修复与 Plan Reviewer 默认均继承当前模型和推理强度，不内置角色型号或固定强度。用户固定偏好写入既有 `agent_policy` 的任务、角色或单 Agent 配置，不新增配置系统；代码 Reviewer/汇总者沿用其 Review Skill 的同一继承与覆盖规则。
 - 显式目标组合不可用或无法核实时暂停相关派发并说明原因，不静默替换。验证失败保留证据，不能靠更换模型把失败结果改成通过；权限和范围阻塞不能通过配置降级绕过。
 - 主 Agent 的当前模型不能用子 Agent 配置自行切换。用户指定独立 planner/architect 时，可在有并行价值且授权允许的情况下派发；若指定的是当前主 Agent 本身，说明需用户切换会话设置，不能假装已生效。
 
 ## 严格方案执行预设
 
-用户明确选择 `strict-plan-execution` 时，在既有 `agent_policy` 中按角色写入以下请求值：Planner 与 Plan Reviewer 为 `astra/low`，Coder 与 Fix 为 `terra/high`，代码 Reviewer 与汇总者为 `astra/low`。该预设表达“Planner 负责设计、Terra Coder 负责执行、Reviewer 负责核验”的职责分离；单 Agent 或角色级用户覆盖仍优先。
+用户明确选择 `strict-plan-execution` 时，在既有 `agent_policy` 中按角色写入以下请求值：Planner 与 Plan Reviewer 为 `astra/low`，Coder 与 Fix 为 `terra/high`，代码 Reviewer 与汇总者为 `astra/low`。该预设表达“Planner 负责设计、Terra Coder 负责执行、Reviewer 负责核验”的职责分离；用户单 Agent、角色或任务级配置，以及 workflow 主控的显式配置均优先于该预设。
 
 所有简称仍必须由当前派发能力解析为唯一的精确模型 ID，并校验推理强度。任一组合不可用或无法核验时，暂停对应派发并报告，不得将 `terra/high` 静默替换为其他 Coder 配置，也不得把建议配置写成实际执行证据。
 - 遵守派发工具的上下文限制：例如全量历史 fork 不接受模型覆盖时，用允许的有限历史或独立上下文，并交接目标、范围、约束、相关证据和完成标准。不要为了切换模型创建新的用户任务。
 
 ## 唯一状态与恢复
 
-普通长任务在既有活动计划中保存 `agent_policy` 和 `agent_roster`；并行任务改由编排器的唯一外部账本保存，规划清单只保留初始分工和运行态定位。短任务实际需要派发时可只在对话中展示，不强制落盘；不得修改全局 Codex 配置。
+普通长任务在既有活动计划中保存 `agent_policy` 和 `agent_roster`；原独立完整并行任务改由编排器的唯一外部账本保存，规划清单只保留初始分工和运行态定位。进入 `workflow-code-session` 时全局阶段、配置运行态和决策由外层 workflow 主控独占，本 Skill 不创建或更新第二份全局账本。短任务实际需要派发时可只在对话中展示，不强制落盘；不得修改全局 Codex 配置。
 
 `agent_policy` 使用 `{schema_version:1,revision,defaults,roles,agents}`；后三项是配置映射，profile 只包含可选的 `model/effort`。按字段解析用户覆盖与继承值，保留逐字段来源；仅针对实现/修复的用户偏好写入相应角色或具体 Agent，不扩散到全任务 `defaults`。旧记录中的配置保留为历史，不将过去的 Skill 默认重新解释为用户偏好；未派发部分按当前规则解析。自然语言中的“所有 reviewer”展开为角色配置，具体名称先映射到展示过的稳定 ID；不要把通配选择器原样留给不支持它的脚本。
 
