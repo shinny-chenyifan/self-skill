@@ -1,4 +1,4 @@
 interface:
   display_name: "并行功能交付编排"
   short_description: "组合方案规划与多视角审查，编排多 Agent、worktree 和集成交付"
-  default_prompt: "使用 $parallel-feature-workflow 基于已确认方案编排多 Agent 实现、分支 Review、修复复审和最终集成；solution-planner 与 local-pr-review 可用时必须组合使用，仅在缺失、无法加载或用户明确选择降级时使用 fallback。"
+  default_prompt: "使用 $parallel-feature-workflow 基于已确认方案编排多 Agent 实现、分支 Review、修复复审和最终集成；原独立完整流程中 solution-planner 与 local-pr-review 可用时必须组合使用，仅在缺失、无法加载或用户明确选择降级时使用 fallback。仅明确指定 workflow-code-session 时，使用单工作目录编码接入模式，不进入原完整状态机或输出 MERGE_READY。"

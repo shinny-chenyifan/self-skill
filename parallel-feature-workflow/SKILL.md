@@ -1,9 +1,19 @@
 ---
 name: parallel-feature-workflow
-description: 为跨模块、多子任务或大型重构编排从已确认方案到实现、Review 和集成的完整交付流程，协调多 Agent、Git worktree、契约、依赖、分支交接、修复复审与合并就绪。用户要求并行开发、多 Agent 实现、worktree 隔离、跨分支集成或完整方案到 Review 闭环时使用。solution-planner 和 local-pr-review 可用时必须组合使用；仅在对应 Skill 缺失、无法加载，或用户明确禁用并选择降级流程时使用内置 fallback。不适用于单一局部、强耦合且并行收益不足的改动。
+description: 为跨模块、多子任务或大型重构编排从已确认方案到实现、Review 和集成的完整流程，协调多 Agent、Git worktree、契约、依赖、分支交接、修复复审和合并就绪。用户要求并行开发、多 Agent 实现、worktree 隔离、跨分支集成或完整方案到 Review 闭环时使用。solution-planner 和 local-pr-review 可用时必须组合使用；仅在对应 Skill 缺失、无法加载，或用户明确禁用并选择降级流程时使用内置 fallback。不适用于单一局部、强耦合且并行收益不足的改动；此限制只适用于下述原独立完整流程，明确指定 `workflow-code-session` 时按其专属接入规则执行。
 ---
 
 # 并行功能交付编排
+
+## 入口路由
+
+只有调用方明确指定 `workflow-code-session`，才进入 [workflow-code-session.md](references/workflow-code-session.md) 的单工作目录编码接入模式。不得仅因请求中出现“自动”或“并行”而切换入口；未明确指定时，继续执行下述原独立完整流程。
+
+`workflow-code-session` 从专属参考直接核验 plan、授权和编码前提，不进入原完整流程的状态机、manifest、模板或 `validate_workflow.py` 校验器，也不得输出 `MERGE_READY`。它只完成编码协调、本地提交和固定 HEAD 交接；后续 Review 或修复由外层 workflow 主控按用户选择另行安排。
+
+原独立完整流程的小任务排除、完整 Planning Handoff 和 specialist 组合要求只适用于该流程。显式 `workflow-code-session` 可以由单个 Coder 串行实施，但其独立 Plan Review 仍按适用的方案规则执行，不得把小任务排除误作拒绝该入口的理由。
+
+本节之后的目标、资源读取、能力路由、完整状态机和最终输出章节，均只适用于原独立完整流程；`workflow-code-session` 只读取其专属参考及其中要求的配置参考。
 
 ## 目标
 
@@ -19,7 +29,7 @@ description: 为跨模块、多子任务或大型重构编排从已确认方案�
 
 ## 资源读取
 
-执行完整工作流时，按阶段完整读取以下文件：
+执行原独立完整工作流时，按阶段完整读取以下文件：
 
 1. 开始编排前读取 [workflow-state-machine.md](references/workflow-state-machine.md)。
 2. 生成任务、契约和 Agent 交接前读取 [handoff-contracts.md](references/handoff-contracts.md)。

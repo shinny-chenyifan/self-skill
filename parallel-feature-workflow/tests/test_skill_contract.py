@@ -19,6 +19,7 @@ class SkillContractTests(unittest.TestCase):
                 SKILL_ROOT / "references" / "handoff-contracts.md",
                 SKILL_ROOT / "references" / "git-worktree-lifecycle.md",
                 SKILL_ROOT / "references" / "fallback-protocols.md",
+                SKILL_ROOT / "references" / "workflow-code-session.md",
             )
         )
 
@@ -130,12 +131,52 @@ class SkillContractTests(unittest.TestCase):
             ),
         )
 
+    def test_workflow_code_session_has_an_explicit_separate_route(self):
+        code_session = (
+            SKILL_ROOT / "references" / "workflow-code-session.md"
+        ).read_text(encoding="utf-8")
+        for value in (
+            "只有调用方明确指定 `workflow-code-session`",
+            "不进入原完整流程的状态机、manifest、模板或 `validate_workflow.py` 校验器",
+            "不得输出 `MERGE_READY`",
+            "单个 Coder 串行实施",
+        ):
+            with self.subTest(value=value):
+                self.assertIn(value, self.skill_text)
+        for value in (
+            "每个文件有唯一写入负责人",
+            "所有 Coder 停写",
+            "只有 code 主 Agent 操作 Git",
+        ):
+            with self.subTest(value=value):
+                self.assertIn(value, code_session)
+
+    def test_workflow_code_session_configuration_stays_outside_legacy_schema(self):
+        dispatch = (
+            SKILL_ROOT / "references" / "agent-dispatch.md"
+        ).read_text(encoding="utf-8")
+        self.assertRegex(
+            dispatch,
+            re.compile(
+                r"用户对具体 Agent、角色或任务的配置优先.{0,80}"
+                r"workflow 的明确配置.{0,100}"
+                r"原完整流程的默认值或 `strict-plan-execution` 预设"
+                r".{0,80}继承当前配置",
+                re.DOTALL,
+            ),
+        )
+        self.assertIn(
+            "外层任务记录的单一写者保存，不写入旧 schema",
+            dispatch,
+        )
+
     def test_all_direct_resources_exist(self):
         expected = (
             "references/workflow-state-machine.md",
             "references/handoff-contracts.md",
             "references/git-worktree-lifecycle.md",
             "references/fallback-protocols.md",
+            "references/workflow-code-session.md",
             "scripts/validate_workflow.py",
             "agents/openai.yaml",
             "assets/templates/workflow-manifest.json",

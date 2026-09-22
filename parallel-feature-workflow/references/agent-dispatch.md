@@ -18,6 +18,14 @@ Planner、Coder、Fix 和 Plan Reviewer 默认均继承当前模型与推理强�
 
 严格方案执行的 Coder prompt 必须逐条传入已批准实施规格与确切 `plan_revision`，并要求先核验事实前提。Coder 仅可实现批准的 `STEP-*`，可自行决定不改变语义的局部写法；不得重新设计、改变公共行为或错误语义、扩大范围或补造需求。发现差异必须停止受影响步骤，回报证据、影响的 `AC/STEP/TEST` 与最小修订建议；编排器将该任务标为阻塞并返回 Planner，而非让 Coder 选择替代方案。
 
+## `workflow-code-session` 配置与职责
+
+此模式按字段解析配置：用户对具体 Agent、角色或任务的配置优先，其次是 workflow 的明确配置，再次是原完整流程的默认值或 `strict-plan-execution` 预设，最后才继承当前配置。每个显式组合仍须由实际派发后端核验；无法核验或不可用时停止相关派发，不静默替换。
+
+本参考的 `agent_policy` 和 `agent_roster` schema 仅用于原完整流程。`workflow-code-session` 的运行态配置、选择依据和实际派发结果只由外层任务记录的单一写者保存，不写入旧 schema，也不把外层运行态回写为规划基线。
+
+多 session 模式由 code 主 Agent 组织 Coder；简略模式中当前主 Agent 同时承担外层主控和编码协调职责，不创建虚拟 code session，也不向自己发送交接消息。两种结构都必须传递任务边界、文件 owner、依赖、停写窗口、验证要求和禁止动作；Coder 只执行分配路径内的编码并回报事实。
+
 ## 单写者记录与恢复
 
 在外部运行态中保存 `agent_policy={schema_version:1,revision,defaults,roles,agents}` 和 `agent_roster={revision,displayed_revision,agents}`；profile 仅有可选 model/effort，agents 按稳定 ID 索引。普通活动计划已经有这些记录时在接入编排处迁移一次，之后只写外部账本。初始编排文档保留角色/任务与并发约束，不把后续运行配置回写 PLAN_SHA。
