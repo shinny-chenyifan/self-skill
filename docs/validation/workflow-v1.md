@@ -36,6 +36,7 @@ T1 的 `scope_id=b81975ed94896a4dd73cd4a08d1bcf66a78694b3b8cd38a0e8f9236e0d61e88
 
 - T2 主控、plan phase 和首个 Planner 曾读取安装路径的旧版 solution-planner，导致两文件任务被展开为不必要的完整门禁方案。主控保留原 attempt 证据，明确仓库改造版的绝对路径，按轻量精确规则收敛后再独立审查；未重启 T2、未改变已批准语义、未重做 T1。实际运行必须核对所消费 skill 的路径和版本，不能仅凭同名认定已使用改造版。
 - T2 correctness Reviewer 先读安装版 local-pr-review，随后完整读取仓库版并按其执行；最终结果绑定仓库版契约，保留混用路径的过程记录。
+- T2 review 最终回复的手写 session 字段误写为 `01a0c727-4248-7132-b625-8a45723f3b05`；关闭检查核对工具返回的真实任务 ID、该轮 START_ACK 与 `t2-review-1.md`，三者均为 `01a0c727-4248-7132-8098-4ab91fbced0d`。主控记录采用正确来源，但这不代表所有摘要字段无差错；标识不匹配时必须交叉核验，不能仅凭成功摘要推进。
 - 自动 Fix 首次因契约绝对路径未写全，在核验阶段停止且未修改文件；主控补齐仓库版 `workflow-code-session.md` 路径后继续同一 attempt，没有新增或重置修复次数。
 
 ## 模拟覆盖与未就绪能力
@@ -59,6 +60,6 @@ T1 的 `scope_id=b81975ed94896a4dd73cd4a08d1bcf66a78694b3b8cd38a0e8f9236e0d61e88
 
 - 规格与总记录：`task-record.md`、`w4-checklist.md`、`trial/implementation-plan.md`、`trial/auto-repair-plan.md`、`trial/auto-plan-review.md`。
 - T1 与 P3：`r2-result.json`、`r2-*.json`。
-- T2：`trial/t2-controller-record.md`、`trial/t2-discuss-1.md`、`trial/t2-plan-1.md`、`trial/t2-plan-review-1.md`、`trial/t2-code-1.md`、`trial/t2-review-1.md`、`trial/t2-review-*.json`。
+- T2：`trial/t2-controller-record.md`、`trial/t2-discuss-1.md`、`trial/t2-plan-1.md`、`trial/t2-plan-review-1.md`、`trial/t2-code-1.md`、`trial/t2-review-1.md`、`trial/t2-review-*.json`、`trial/session-id-check.json`。
 - 原生单次与自动修复：`trial/t2-native-review.txt/.log`、`trial/auto-result.md/.json`、`trial/auto-failure-test.txt`、`trial/auto-native-before.txt/.log`、`trial/auto-native-after.txt/.log`。
 - 模拟演练：`trial/scenario-simulation.md`；所有条目均标明为静态推导。
