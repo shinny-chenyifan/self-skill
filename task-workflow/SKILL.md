@@ -7,6 +7,10 @@ description: 为需要讨论、规划、编码和审查协作的任务协调执�
 
 协调一个任务的阶段、会话和全局状态。复用 `solution-planner`、`parallel-feature-workflow` 的 `workflow-code-session` 和 `local-pr-review`；本 skill 不复制三者的专业算法、旧完整状态机或复杂持久 schema。
 
+`discuss` 按需把模糊或冲突的请求澄清为需求结论：目标明确、范围局部的任务沿既有路径处理，不强制经过 discuss；复杂歧义、关键冲突或需要先界定 Bug problem framing 时，主控可调用它。其“可交接”或“待澄清”只是需求结论，不是第二状态机或全局记录；完整方案仍由 Planner 复核并确定 `contract_status`，轻量方案不强制三轴状态。Review Finding 的分诊及下游版本失效仍由主控负责。
+
+用户显式指定 discuss，或主控判定它是当前交接的必要能力时，必须先核验该 skill 可完整读取且可用；缺失、不可加载或被门禁／权限／环境阻断时，报告具体缺口并停在需求交接点，不能用主控猜测、方案或诊断结果冒充 discuss 结论。
+
 ## 先选择执行结构和交互方式
 
 执行结构与交互方式正交，默认是非自动模式。用户明确指定简略模式或多 session 模式时直接采用；未指定时，先只读判断范围并推荐，说明理由和影响，等待确认或调整。用户只说“自动完成”不等于指定结构。
@@ -21,7 +25,7 @@ description: 为需要讨论、规划、编码和审查协作的任务协调执�
 | 用户请求 | 阶段 | 停止点 |
 | --- | --- | --- |
 | review 某项改动 | review | 仅报告，不自行修复 |
-| 排查问题 | discuss | 给出结论，等待后续指令 |
+| 排查问题 | discuss | 先界定 problem framing；根因未获证据时等待后续指令 |
 | 按已有 plan 实现 | code → review | 按交互方式处理 Review |
 | 检查 plan，无问题则实现 | plan → code → review | plan 不通过时上报 |
 | 按需求做 plan 并实现 | discuss → plan → code → review | 完成授权任务或触及阻断 |
@@ -67,4 +71,4 @@ Review 返回后，主控先分诊每条 Finding：核实归因、证据，以�
 
 多 session 的持续监控、探查、停止和恢复遵循 [session-control.md](references/session-control.md)。简略模式直接检查本 session 的子 agent 和在途命令，不创建虚拟 phase 或向自己发探查。归档或 interrupt 单独发生不等于全部写者和命令已经停止。
 
-正式使用前只按当前阶段、执行结构和 Review 方式解析实际需要的 `solution-planner`、`parallel-feature-workflow` 或 `local-pr-review`，从当前 Skills catalog 核验可完整读取和满足阶段；不得假定本仓库或安装路径。任一所需 skill 缺失、不可读或被门禁/权限/环境阻断时说明具体缺口并等待用户决定，不复制其算法或冒充其结果。简略模式核验子 agent/命令的状态与停止覆盖，以及所选 Review 路由；多 session 模式另核验独立创建、状态读取、消息唤醒和所需的后台唤醒能力。原生单次 Review 仅在用户选择该路由时核验其固定范围输入、只读约束、结果输出和配置可见性，不能因其不可用阻断 `local-pr-review` 路由。只有实际采用持续监控时，才在启用前核验 heartbeat 的精度、停止覆盖及模型/推理强度可见性。没有核验的能力不承诺可用；当前 W4 完整试运行尚未完成，不能称 workflow v1 可用。
+正式使用前只按当前阶段、执行结构和 Review 方式解析实际需要的 `discuss`、`solution-planner`、`parallel-feature-workflow` 或 `local-pr-review`，从当前 Skills catalog 核验可完整读取和满足阶段；不得假定本仓库或安装路径。任一所需 skill 缺失、不可读或被门禁/权限/环境阻断时说明具体缺口并等待用户决定，不复制其算法或冒充其结果。简略模式核验子 agent/命令的状态与停止覆盖，以及所选 Review 路由；多 session 模式另核验独立创建、状态读取、消息唤醒和所需的后台唤醒能力。原生单次 Review 仅在用户选择该路由时核验其固定范围输入、只读约束、结果输出和配置可见性，不能因其不可用阻断 `local-pr-review` 路由。只有实际采用持续监控时，才在启用前核验 heartbeat 的精度、停止覆盖及模型/推理强度可见性。没有核验的能力不承诺可用；当前 W4 完整试运行尚未完成，不能称 workflow v1 可用。

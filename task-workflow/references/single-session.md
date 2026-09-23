@@ -1,6 +1,6 @@
 # 简略模式
 
-当前主 agent 同时是主控和阶段协调者：直接与用户讨论并制定详细 plan，不创建 discuss、plan、code 或 review phase session，也不为制定 plan 创建 Planner。必要的独立 Plan Reviewer 仍是子 agent；首次审查有阻断问题时，修订一次并复审受影响部分，仍阻断则返回用户或主控。高风险任务的必需覆盖不降低。
+当前主 agent 同时是主控和阶段协调者：按需调用 `discuss` 澄清模糊或冲突的需求，但不创建虚拟 discuss、plan、code 或 review phase session，也不为制定 plan 创建 Planner。Bug 的需求澄清只界定 problem framing，不等同于根因结论或根因调查；需要后者时按授权另行处理。必要的独立 Plan Reviewer 仍是子 agent；首次审查有阻断问题时，修订一次并复审受影响部分，仍阻断则返回用户或主控。高风险任务的必需覆盖不降低。
 
 当前主 agent 按 `solution-planner` 的可实施方案语义组织 plan，并保存确切版本、审查结果和批准依据。非自动模式等待用户确认；自动模式只在真实预授权范围内批准确切版本。用户指令导致全局变更时，立即暂停受影响工作、更新任务记录和基线。
 
