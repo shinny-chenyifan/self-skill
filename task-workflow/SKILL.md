@@ -25,7 +25,7 @@ description: 为需要讨论、规划、编码和审查协作的任务协调执�
 | 用户请求 | 阶段 | 停止点 |
 | --- | --- | --- |
 | review 某项改动 | review | 仅报告，不自行修复 |
-| 排查问题 | discuss | 先界定 problem framing；根因未获证据时等待后续指令 |
+| 排查问题 | discuss | 先界定 problem framing；按授权调查根因，未证实时报告证据与阻断 |
 | 按已有 plan 实现 | code → review | 按交互方式处理 Review |
 | 检查 plan，无问题则实现 | plan → code → review | plan 不通过时上报 |
 | 按需求做 plan 并实现 | discuss → plan → code → review | 完成授权任务或触及阻断 |
